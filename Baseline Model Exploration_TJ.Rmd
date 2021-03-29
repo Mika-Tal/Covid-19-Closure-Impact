@@ -28,21 +28,14 @@ working_df <- read.csv("working_14days.csv")
 
 
 ```{r}
-names(working_df)
-```
-
-
-
-```{r}
-
-#remove 15:22
 
 #convert the demographic information to 
 working_df_subset <-
   working_df %>% 
   select(-c(1,18:35, 37:39, 45:60)) %>% 
   #converting the percentages in the control variables
-  mutate(Male = as.character(Male), 
+  mutate(
+         Male = as.character(Male), 
          Male = str_remove_all(Male, "%"), 
          per.male = as.numeric(Male),
          
@@ -70,16 +63,92 @@ working_df_subset <-
          Asian = str_remove_all(Asian , "%"), 
          per.asian = as.numeric(Asian),
          
+         Native.Hawaiian.and.Other.Pacific.Islander = as.character( Native.Hawaiian.and.Other.Pacific.Islander), 
+          Native.Hawaiian.and.Other.Pacific.Islander = str_remove_all( Native.Hawaiian.and.Other.Pacific.Islander , "%"), 
+         per.pac.isl = as.numeric(Native.Hawaiian.and.Other.Pacific.Islander)
          
-         ) 
- # mutate(per.white  = White/Total.population)
-#names(working_df_subset)
+         
+         )  %>% 
+  select(-c(15:22)) #removes the original columns for demographic information
+
 
 ```
 
+
+### Step 2: Isolate the data to only include the outcome variables and the control variables
+
+```{r}
+df_control_only  <- 
+  working_df_subset %>% 
+  select(-c(3:12,15:38)) 
+
+
+#read in state area information
+state_area <- read.csv("state_area.csv")
+
+state_area <- state_area %>% 
+              filter(row_number() != 1) %>% #removes the total column
+              filter(row_number() != n()) 
+
+state_area <- state_area %>% 
+  select(-c(1,3,4)) %>% 
+  rename(state = "state_abrev")
+  
+```
+
+```{r, message = FALSE}
+#join the state_area dataset with the existing dataset
+
+df_control_combo <-
+  df_control_only %>%
+  left_join(state_area)
+
+#creating a new population density column
+df_control_combo <-
+  df_control_combo %>% 
+  mutate(Land_Area_Sq_MI = as.character(Land_Area_Sq_MI),
+         Land_Area_Sq_MI = str_remove_all(Land_Area_Sq_MI, ","),
+         Land_Area_Sq_MI = as.numeric(Land_Area_Sq_MI),
+         
+         Land_Area_Sq_KM = as.character(Land_Area_Sq_KM),
+         Land_Area_Sq_KM  = str_remove_all(Land_Area_Sq_KM , ","),
+         Land_Area_Sq_KM  = as.numeric(Land_Area_Sq_KM),
+         
+         #calculates the population density
+         pop.dens = Total.population/Land_Area_Sq_MI)
+
+```
+
+**We still need to clean the outcome variables to make sure they are recording the right information.**
+
 ### Check for Collinearity
 
+```{r}
+# Drop gender, ltv
+ltv.unique.cancel.ltv.corrsub <- subset(ltv.unique.cancel.ltv, select = -c(gender, ltv))
+
+# # Correlation matrix
+# corr <- cor(ltv.unique.cancel.ltv.corrsub)
+# corr
+# 
+# # Pairs plot
+# ggpairs(ltv.unique.cancel.ltv.corrsub, 
+#         title = "LTV Data Predictor Pairs Plot")
+# 
+# # Correlation plot
+# ggcorrplot(corr, 
+#            lab = TRUE, 
+#            title = "LTV Data Predictor Correlation Plot")
+```
+
+
 Step 2: Select 14 days before and 14 days after the first policy was implemented for the time range
+
+```{r}
+
+```
+
+
 Step 3: Split the data into a training and testing set
 Step 4: Apply LASSO regularization (L1 regularization) to select the important control variables 
 Step 5: Re-run linear regression to get coefficient estimates on the variables that are interpretable
