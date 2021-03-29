@@ -1,3 +1,5 @@
+#Analysis for Random Forest and XGBoost
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
@@ -37,6 +39,7 @@ deaths_df = deaths_df %>%
 4. I think We discussed using population density instead of population?
 5. Not sure we gender is going to give us much. Maybe remove? 
 6. We should add some sort of health indicators - Ahmed might have something in mind? otherwise we can use 
+7. Date ranges we want to use? 
 
 ## Split and prepare train/test datasets
 
