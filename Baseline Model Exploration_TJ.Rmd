@@ -4,7 +4,7 @@ date: "3/26/2021"
 output: html_document
 ---
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 library(tidyverse)
 library(lubridate)
 library(ggcorrplot)
@@ -25,6 +25,57 @@ working_df <- read.csv("working_14days.csv")
 
 
 ### Step 1: Clean up the data on the demographic indicators
+
+
+```{r}
+names(working_df)
+```
+
+
+
+```{r}
+
+#remove 15:22
+
+#convert the demographic information to 
+working_df_subset <-
+  working_df %>% 
+  select(-c(1,18:35, 37:39, 45:60)) %>% 
+  #converting the percentages in the control variables
+  mutate(Male = as.character(Male), 
+         Male = str_remove_all(Male, "%"), 
+         per.male = as.numeric(Male),
+         
+         Female = as.character(Female), 
+         Female  = str_remove_all(Female , "%"), 
+         per.female = as.numeric(Female),
+    
+         X65.years.and.over = as.character(X65.years.and.over), 
+         X65.years.and.over = str_remove_all(X65.years.and.over, "%"), 
+         per.65.and.over = as.numeric(X65.years.and.over),
+         
+         White = as.character(White), #change the demographic information to characters
+         White = str_remove_all(White, "%"), #removes the percentage signs
+         per.white = as.numeric(White), #converts to a numeric number (which is a percentage already)
+         
+         Black.or.African.American = as.character(Black.or.African.American), 
+         Black.or.African.American = str_remove_all(Black.or.African.American , "%"), 
+         per.black = as.numeric(Black.or.African.American),
+         
+         American.Indian.and.Alaska.Native = as.character(American.Indian.and.Alaska.Native), 
+         American.Indian.and.Alaska.Native = str_remove_all(American.Indian.and.Alaska.Native , "%"), 
+         per.amer.ind = as.numeric(American.Indian.and.Alaska.Native),
+         
+         Asian = as.character(Asian), 
+         Asian = str_remove_all(Asian , "%"), 
+         per.asian = as.numeric(Asian),
+         
+         
+         ) 
+ # mutate(per.white  = White/Total.population)
+#names(working_df_subset)
+
+```
 
 ### Check for Collinearity
 
