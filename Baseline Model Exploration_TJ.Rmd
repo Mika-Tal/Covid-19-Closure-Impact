@@ -9,6 +9,7 @@ library(tidyverse)
 library(lubridate)
 library(ggcorrplot)
 library(GGally)
+library(glmnet) # to perform L1 regularization
 
 options(scipen = 999)
 
@@ -115,7 +116,8 @@ df_control_combo <-
          Land_Area_Sq_KM  = as.numeric(Land_Area_Sq_KM),
          
          #calculates the population density
-         pop.dens = Total.population/Land_Area_Sq_MI)
+         pop.dens = Total.population/Land_Area_Sq_MI) %>% 
+  select(-c(25,26))
 
 ```
 
@@ -123,34 +125,95 @@ df_control_combo <-
 
 ### Check for Collinearity
 
-```{r}
+```{r, fig.height = 8, fig.width = 8}
 # Drop gender, ltv
-ltv.unique.cancel.ltv.corrsub <- subset(ltv.unique.cancel.ltv, select = -c(gender, ltv))
+control_corr<- subset(df_control_combo, select = -c(submission_date, state, political.party.affilation))
 
 # # Correlation matrix
-# corr <- cor(ltv.unique.cancel.ltv.corrsub)
-# corr
-# 
+corr <- cor(control_corr)
+corr
+
 # # Pairs plot
-# ggpairs(ltv.unique.cancel.ltv.corrsub, 
-#         title = "LTV Data Predictor Pairs Plot")
+# ggpairs(control_corr,
+#         title = "Predictors Pairs Plot")
 # 
-# # Correlation plot
-# ggcorrplot(corr, 
-#            lab = TRUE, 
-#            title = "LTV Data Predictor Correlation Plot")
+# Correlation plot
+ggcorrplot(corr,
+           lab = TRUE, 
+           lab_size = 2,
+           title = "Predictor Correlation Plot")
 ```
 
 
-Step 2: Select 14 days before and 14 days after the first policy was implemented for the time range
+## Step 2: Select the date range of interest
+
+```{r}
+df_control_combo <-
+  df_control_combo %>% 
+  filter(as.Date(submission_date) >= as.Date("2020-03-01")
+         & as.Date(submission_date) < as.Date("2020-07-01"))
+```
+
+
+##Step 3: Apply LASSO regularization (L1 regularization) to select the important control variables 
 
 ```{r}
 
+df_subset <-
+  df_control_combo %>% 
+  select(-c(1,2,4,13,15,16))
+
+#creating the response vector and the covariates matrix
+x <- model.matrix(new_cases_per_100k ~ ., df_subset)[,-1]
+y <- df_subset$new_cases_per_100k
+
+
 ```
 
 
-Step 3: Split the data into a training and testing set
-Step 4: Apply LASSO regularization (L1 regularization) to select the important control variables 
+```{r}
+#picking the best value for lambda
+lasso_results <- cv.glmnet(x, y, alpha = 1)
+
+#lambda within one standard error of the lowest value of lambda
+one_se_lambda <- lasso_results$lambda.1se
+
+
+all_vars <- coef(lasso_results, s = one_se_lambda)
+#determines which variables will have a non-zero coefficients
+selected_vars <- rownames(all_vars)[all_vars[,1] != 0]
+
+
+```
+
+The variables selected through LASSO regularization were `r selected_vars[-1]`.
+
+**still need to do validation set comparison**
+
+
+```{r}
+
+
+# #fitting a linear regression with LASSO model
+# 
+# lasso.fit <- glmnet(x, y,)
+# 
+# plot(lasso.fit, xvar = "norm", label = TRUE)
+```
+
+
+## Step 4: Split the data into a training and testing set
+
+```{r}
+set.seed(2022)
+
+train_index <- sample(1:nrow(df_control_combo), 0.5 * nrow(df_control_combo))
+
+train_df <- df_control_combo[train_index,]
+test_df <- df_control_combo[-train_index,]
+```
+
+
 Step 5: Re-run linear regression to get coefficient estimates on the variables that are interpretable
 Step 6: After the control-only baseline model was run, then the user would be able to select the non-pharmaceutical interventions that they want 
 
