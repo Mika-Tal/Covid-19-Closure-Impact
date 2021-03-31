@@ -1,0 +1,119 @@
+---
+title: "XGBoost_Deaths_ShortTimeSpan"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+#install.packages("xgboost")
+loadlibs = function(libs) {
+  for(lib in libs) {
+    class(lib)
+    if(!do.call(require,as.list(lib))) {install.packages(lib)}
+    do.call(require,as.list(lib))
+  }
+}
+libs = c("tidyverse","data.table","stargazer", "caret", "e1071",
+         "randomForest", "C50", "xgboost", "ggplot2", "cowplot")
+loadlibs(libs)
+```
+
+## Load the data & convert some data to factors
+```{r}
+#Load dataset -- For the short time analysis: I used the date range from March 1st to April 30th (helping us to analyze for hold long the association between COVID deaths and NPI's can actually hold)
+working_df <- read.csv("working_14days.csv") # 
+
+working_df <- working_df %>% 
+filter(as.Date(submission_date) >= as.Date("2020-03-01")
+         & as.Date(submission_date) < as.Date("2020-04-30")) %>% 
+  select(-c(1)) #removes the random "X" column that gets created when initially importing the dataset locally
+
+
+  # filter(submission_date >= as.Date("2020-03-01") & submission_date < as.Date("2020-04-30"))
+
+# subset the data to only include the outcome variable and the closure indicator variables
+deaths_df <- working_df %>%
+  select(new_deaths_per_100k, submission_date, state, c(85:92)) 
+
+#Check  the df structure
+str(deaths_df)
+
+#Convert the policy indicators to factors:
+deaths_df = deaths_df %>%
+  mutate_if(is.integer, as.factor)
+```
+
+
+## Create testing and training subsets
+```{r}
+set.seed(1)
+#generate random index list for training and test sets
+trainIndex = sample(1:nrow(deaths_df), 0.8 * nrow(deaths_df))
+#create train set 
+trainDeaths = deaths_df[trainIndex, ]
+#create test set
+testDeaths = deaths_df[-c(trainIndex), ]
+```
+
+## Create the matrices needed for XGBoost WITHOUT the submission date & state
+
+```{r}
+# convert features to matrix 
+trainMTX = model.matrix(new_deaths_per_100k~ . - submission_date - state, trainDeaths)[, -1]
+testMTX = model.matrix(new_deaths_per_100k ~ . - submission_date - state , testDeaths)[, -1]
+```
+
+## Model 3. XGBoost
+
+```{r}
+#Convert the predictor variable matrices to xgb.DMatrix data types
+xgb_train=xgb.DMatrix(trainMTX)
+xgb_test=xgb.DMatrix(testMTX)
+
+#Define random grid parameters for tuning the models
+XGBtc=trainControl(
+  method='cv',
+  number=5,
+  allowParallel=TRUE,
+  verboseIter=FALSE,
+  returnData=FALSE
+)
+# create grid for tuning hyperparameters
+XGBtg <- expand.grid(nrounds = c(20, 50, 100),
+                       max_depth = c(5, 10, 15),
+                       colsample_bytree = seq(0.5, 0.9, length.out = 5),
+                       eta = c(0.1, 0.2, 0.4),
+                       gamma=c(0, 2, 3),
+                       min_child_weight = 1,
+                       subsample = 0.75
+                      )
+
+```
+
+```{r, warning = FALSE}
+# train model 
+xgb_model = train(
+  xgb_train, trainDeaths$new_deaths_per_100k,  
+  trControl = XGBtc,
+  tuneGrid = XGBtg,
+  method = "xgbTree")
+```
+
+
+```{r}
+# get hyperparameters of best model from grid search 
+xgb_model$bestTune
+```
+
+
+```{r}
+XGBPred=predict(xgb_model, testMTX)
+XGBRMSE = sqrt(mean ((testDeaths$new_deaths_per_100k - XGBPred) ^ 2 ) )
+```
+
+
+
+
+
+
