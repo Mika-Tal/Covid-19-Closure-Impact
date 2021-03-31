@@ -108,10 +108,15 @@ xgb_model$bestTune
 
 
 ```{r}
-XGBPred=predict(xgb_model, testMTX)
+XGBPred = predict(xgb_model, testMTX)
 XGBRMSE = sqrt(mean ((testDeaths$new_deaths_per_100k - XGBPred) ^ 2 ) )
+
+XGBRMSE
+
 ```
 
+
+For the time period from March 1, 2020 to April 30, 2020, the RMSE of the "treatment" only variables is0.5833348, when we only include the binary closure variables, which suggests that these variables only (SANS controls) are not particularly good predictors of the incidence of new deaths.
 
 
 
