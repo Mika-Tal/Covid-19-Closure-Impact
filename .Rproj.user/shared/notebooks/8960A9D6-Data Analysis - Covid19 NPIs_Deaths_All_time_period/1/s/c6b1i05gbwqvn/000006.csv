@@ -1,0 +1,8 @@
+"0","#Load dataset"
+"0","working_df = read.csv(""working_14days.csv"")"
+"0",""
+"0",""
+"0","working_df$submission_date <- as.character(working_df$submission_date)"
+"0",""
+"0","working_df%>%  "
+"0","filter(submission_date >= as.Date(""2020-03-01"") & submission_date < as.Date(""2020-12-31""))"

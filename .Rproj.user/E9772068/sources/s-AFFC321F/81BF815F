@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1617237400585.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "81BF815F",
+    "lastKnownWriteTime" : 1617170161,
+    "last_content_update" : 1617170161,
+    "path" : "C:/Users/clare/OneDrive/Desktop/KeyLogic/Energy_Storage/Ancillary/as_graphics.Rmd",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "176,0",
+        "scrollLine" : "172"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 8,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

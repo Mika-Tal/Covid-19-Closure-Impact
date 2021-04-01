@@ -1,0 +1,445 @@
+---
+title: "MISO_AS_Rev"
+author: "ClareCallahan"
+date: "3/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(ggplot2)
+
+library(tidyverse)
+```
+
+
+```{r}
+
+miso_clean <- read.csv("C:/Users/clare/OneDrive/Desktop/KeyLogic/Energy_Storage/Ancillary/miso_clean.csv")
+View(miso_clean)
+
+```
+
+
+##DAH Gen 10 Min Spinnning Reserve
+```{r}
+
+miso_clean <- as.data.frame(miso_clean)
+
+obs_11<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - 10 Minute Spinning Reserve'& miso_clean$Year==2011)
+obs_12<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - 10 Minute Spinning Reserve'& miso_clean$Year==2012)
+obs_13<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - 10 Minute Spinning Reserve'& miso_clean$Year==2013)
+obs_14<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - 10 Minute Spinning Reserve'& miso_clean$Year==2014)
+obs_15<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - 10 Minute Spinning Reserve'& miso_clean$Year==2015)
+obs_16<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - 10 Minute Spinning Reserve'& miso_clean$Year==2016)
+
+miso_clean$Price...MWh = as.numeric(miso_clean$Price...MWh)
+
+a<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - 10 Minute Spinning Reserve'& Year==2011)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+b<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - 10 Minute Spinning Reserve'& Year==2012)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+c<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - 10 Minute Spinning Reserve'& Year==2013)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+d<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - 10 Minute Spinning Reserve'& Year==2014)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+e<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - 10 Minute Spinning Reserve'& Year==2015)%>%
+  pull(Price...MWh)%>%
+  sum()
+f<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - 10 Minute Spinning Reserve'& Year==2016)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+
+DAH_10MSP <- data.frame(year= c(2011,2012, 2013, 2014, 2015, 2016), 
+                        DAH_10MinSpin_TotalYearRev= c(a, b, c, d, e, f), 
+                        NumberHours = c(obs_11, obs_12, obs_13, obs_14, obs_15, obs_16))
+
+
+DAH_10MSP
+
+```
+
+
+
+###DAH Gen - 10 Minute Supplemental
+```{r}
+
+obs_11<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - 10 Minute Supplemental'& miso_clean$Year==2011)
+obs_12<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - 10 Minute Supplemental'& miso_clean$Year==2012)
+obs_13<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - 10 Minute Supplemental'& miso_clean$Year==2013)
+obs_14<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - 10 Minute Supplemental'& miso_clean$Year==2014)
+obs_15<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - 10 Minute Supplemental'& miso_clean$Year==2015)
+obs_16<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - 10 Minute Supplemental'& miso_clean$Year==2016)
+
+
+a<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - 10 Minute Supplemental'& Year==2011)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+b<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - 10 Minute Supplemental'& Year==2012)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+c<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - 10 Minute Supplemental'& Year==2013)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+d<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - 10 Minute Supplemental'& Year==2014)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+e<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - 10 Minute Supplemental'& Year==2015)%>%
+  pull(Price...MWh)%>%
+  sum()
+f<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - 10 Minute Supplemental'& Year==2016)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+
+DAH_10MSup <- data.frame(year= c(2011,2012, 2013, 2014, 2015, 2016), 
+                        DAH_10MinSup_TotalYearRev= c(a, b, c, d, e, f), 
+                        NumberHours = c(obs_11, obs_12, obs_13, obs_14, obs_15, obs_16))
+
+
+DAH_10MSup
+
+```
+#DAH Gen - Regulation
+```{r}
+
+obs_11<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - Regulation'& miso_clean$Year==2011)
+obs_12<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - Regulation'& miso_clean$Year==2012)
+obs_13<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - Regulation'& miso_clean$Year==2013)
+obs_14<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - Regulation'& miso_clean$Year==2014)
+obs_15<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - Regulation'& miso_clean$Year==2015)
+obs_16<-sum(miso_clean$Price.Type.Full.Description == 'DAH Gen - Regulation'& miso_clean$Year==2016)
+
+miso_clean$Price...MWh = as.numeric(miso_clean$Price...MWh)
+
+a<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - Regulation'& Year==2011)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+b<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - Regulation'& Year==2012)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+c<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - Regulation'& Year==2013)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+d<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - Regulation'& Year==2014)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+e<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - Regulation'& Year==2015)%>%
+  pull(Price...MWh)%>%
+  sum()
+f<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Gen - Regulation'& Year==2016)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+
+DAH_GenReg <- data.frame(year= c(2011,2012, 2013, 2014, 2015, 2016), 
+                        DAH_GenReg_TotalYearRev= c(a, b, c, d, e, f), 
+                        NumberHours = c(obs_11, obs_12, obs_13, obs_14, obs_15, obs_16))
+
+
+DAH_GenReg
+
+
+```
+DAH Stored Energy Reserve
+```{r}
+
+
+obs_11<-sum(miso_clean$Price.Type.Full.Description == 'DAH Stored Energy Reserve'& miso_clean$Year==2011)
+obs_12<-sum(miso_clean$Price.Type.Full.Description == 'DAH Stored Energy Reserve'& miso_clean$Year==2012)
+obs_13<-sum(miso_clean$Price.Type.Full.Description == 'DAH Stored Energy Reserve'& miso_clean$Year==2013)
+obs_14<-sum(miso_clean$Price.Type.Full.Description == 'DAH Stored Energy Reserve'& miso_clean$Year==2014)
+obs_15<-sum(miso_clean$Price.Type.Full.Description == 'DAH Stored Energy Reserve'& miso_clean$Year==2015)
+obs_16<-sum(miso_clean$Price.Type.Full.Description == 'DAH Stored Energy Reserve'& miso_clean$Year==2016)
+
+miso_clean$Price...MWh = as.numeric(miso_clean$Price...MWh)
+
+a<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Stored Energy Reserve'& Year==2011)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+b<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Stored Energy Reserve'& Year==2012)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+c<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Stored Energy Reserve'& Year==2013)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+d<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Stored Energy Reserve'& Year==2014)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+e<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Stored Energy Reserve'& Year==2015)%>%
+  pull(Price...MWh)%>%
+  sum()
+f<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'DAH Stored Energy Reserve'& Year==2016)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+
+DAH_StoredEn <- data.frame(year= c(2011,2012, 2013, 2014, 2015, 2016), 
+                        DAH_StoredEng_TotalYearRev= c(a, b, c, d, e, f), 
+                        NumberHours = c(obs_11, obs_12, obs_13, obs_14, obs_15, obs_16))
+
+
+DAH_StoredEn
+```
+
+
+
+#############
+
+RTH
+
+###########
+
+
+
+
+##RTH Gen 10 Min Spinnning Reserve
+```{r}
+
+miso_clean <- as.data.frame(miso_clean)
+
+obs_11<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - 10 Minute Spinning Reserve'& miso_clean$Year==2011)
+obs_12<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - 10 Minute Spinning Reserve'& miso_clean$Year==2012)
+obs_13<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - 10 Minute Spinning Reserve'& miso_clean$Year==2013)
+obs_14<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - 10 Minute Spinning Reserve'& miso_clean$Year==2014)
+obs_15<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - 10 Minute Spinning Reserve'& miso_clean$Year==2015)
+obs_16<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - 10 Minute Spinning Reserve'& miso_clean$Year==2016)
+
+miso_clean$Price...MWh = as.numeric(miso_clean$Price...MWh)
+
+a<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - 10 Minute Spinning Reserve'& Year==2011)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+b<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - 10 Minute Spinning Reserve'& Year==2012)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+c<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - 10 Minute Spinning Reserve'& Year==2013)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+d<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - 10 Minute Spinning Reserve'& Year==2014)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+e<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - 10 Minute Spinning Reserve'& Year==2015)%>%
+  pull(Price...MWh)%>%
+  sum()
+f<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - 10 Minute Spinning Reserve'& Year==2016)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+
+RTH_10MSP <- data.frame(year= c(2011,2012, 2013, 2014, 2015, 2016), 
+                        RTH_10MinSpin_TotalYearRev= c(a, b, c, d, e, f), 
+                        NumberHours = c(obs_11, obs_12, obs_13, obs_14, obs_15, obs_16))
+
+
+RTH_10MSP
+
+```
+
+
+
+###RTH Gen - 10 Minute Supplemental
+```{r}
+
+obs_11<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - 10 Minute Supplemental'& miso_clean$Year==2011)
+obs_12<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - 10 Minute Supplemental'& miso_clean$Year==2012)
+obs_13<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - 10 Minute Supplemental'& miso_clean$Year==2013)
+obs_14<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - 10 Minute Supplemental'& miso_clean$Year==2014)
+obs_15<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - 10 Minute Supplemental'& miso_clean$Year==2015)
+obs_16<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - 10 Minute Supplemental'& miso_clean$Year==2016)
+
+
+a<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - 10 Minute Supplemental'& Year==2011)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+b<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - 10 Minute Supplemental'& Year==2012)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+c<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - 10 Minute Supplemental'& Year==2013)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+d<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - 10 Minute Supplemental'& Year==2014)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+e<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - 10 Minute Supplemental'& Year==2015)%>%
+  pull(Price...MWh)%>%
+  sum()
+f<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - 10 Minute Supplemental'& Year==2016)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+
+RTH_10MSup <- data.frame(year= c(2011,2012, 2013, 2014, 2015, 2016), 
+                        RTH_10MinSup_TotalYearRev= c(a, b, c, d, e, f), 
+                        NumberHours = c(obs_11, obs_12, obs_13, obs_14, obs_15, obs_16))
+
+
+RTH_10MSup
+
+```
+#RTH Gen - Regulation
+```{r}
+
+obs_11<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - Regulation'& miso_clean$Year==2011)
+obs_12<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - Regulation'& miso_clean$Year==2012)
+obs_13<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - Regulation'& miso_clean$Year==2013)
+obs_14<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - Regulation'& miso_clean$Year==2014)
+obs_15<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - Regulation'& miso_clean$Year==2015)
+obs_16<-sum(miso_clean$Price.Type.Full.Description == 'RTH Gen - Regulation'& miso_clean$Year==2016)
+
+
+a<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - Regulation'& Year==2011)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+b<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - Regulation'& Year==2012)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+c<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - Regulation'& Year==2013)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+d<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - Regulation'& Year==2014)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+e<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - Regulation'& Year==2015)%>%
+  pull(Price...MWh)%>%
+  sum()
+f<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Gen - Regulation'& Year==2016)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+
+RTH_GenReg <- data.frame(year= c(2011,2012, 2013, 2014, 2015, 2016), 
+                        RTH_GenReg_TotalYearRev= c(a, b, c, d, e, f), 
+                        NumberHours = c(obs_11, obs_12, obs_13, obs_14, obs_15, obs_16))
+
+
+RTH_GenReg
+
+
+```
+RTH Stored Energy Reserve
+```{r}
+
+
+obs_11<-sum(miso_clean$Price.Type.Full.Description == 'RTH Stored Energy Reserve'& miso_clean$Year==2011)
+obs_12<-sum(miso_clean$Price.Type.Full.Description == 'RTH Stored Energy Reserve'& miso_clean$Year==2012)
+obs_13<-sum(miso_clean$Price.Type.Full.Description == 'RTH Stored Energy Reserve'& miso_clean$Year==2013)
+obs_14<-sum(miso_clean$Price.Type.Full.Description == 'RTH Stored Energy Reserve'& miso_clean$Year==2014)
+obs_15<-sum(miso_clean$Price.Type.Full.Description == 'RTH Stored Energy Reserve'& miso_clean$Year==2015)
+obs_16<-sum(miso_clean$Price.Type.Full.Description == 'RTH Stored Energy Reserve'& miso_clean$Year==2016)
+
+
+a<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Stored Energy Reserve'& Year==2011)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+b<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Stored Energy Reserve'& Year==2012)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+c<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Stored Energy Reserve'& Year==2013)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+d<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Stored Energy Reserve'& Year==2014)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+e<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Stored Energy Reserve'& Year==2015)%>%
+  pull(Price...MWh)%>%
+  sum()
+f<-miso_clean%>%
+  subset(Price.Type.Full.Description == 'RTH Stored Energy Reserve'& Year==2016)%>%
+  pull(Price...MWh)%>%
+  sum()
+
+
+RTH_StoredEn <- data.frame(year= c(2011,2012, 2013, 2014, 2015, 2016), 
+                        RTH_StoredEng_TotalYearRev= c(a, b, c, d, e, f), 
+                        NumberHours = c(obs_11, obs_12, obs_13, obs_14, obs_15, obs_16))
+
+
+RTH_StoredEn
+```

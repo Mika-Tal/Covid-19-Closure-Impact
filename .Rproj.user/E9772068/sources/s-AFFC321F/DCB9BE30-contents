@@ -1,0 +1,387 @@
+---
+title: "AS_hours"
+author: "ClareCallahan"
+date: "3/5/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(lubridate)
+ercot<- read.csv("ercot_clean.csv", stringsAsFactors = FALSE, na.strings = c("na","NA"))
+
+
+miso<- read.csv("miso_clean.csv", stringsAsFactors = FALSE, na.strings = c("na","NA"))
+ercot$Date<- mdy_hm(ercot$Local.Datetime..Hour.Ending.)
+miso$Date<- mdy_hm(miso$Local.Datetime..Hour.Ending.)
+```
+
+
+ercot%>%
+  ggplot(aes(x=count(h(Date())), y=Price...MWh))+
+  geom_point(aes(color=Market), alpha= 0.7)+
+  ggtitle("ERCOT Day Ahead and Real Time AS Market")
+
+
+ercot%>%
+  ggplot(aes(x = hour(Date))) +
+  geom_histogram(bins = 24) +
+  scale_x_time()
+
+ercot%>%
+  ggplot(aes(x = Price...MWh)) +
+  geom_histogram() 
+
+ercot%>%
+  ggplot(aes(x = hour(Date),y= Price...MWh)) +
+  geom_line() +
+  scale_x_time()+
+  ggtitle('Price by hour cummulative')
+
+
+ercot%>%
+  ggplot(aes(y = hour(Date),x= Price...MWh)) +
+  geom_line() +
+  scale_x_time()+
+  ggtitle('Price by hour')
+
+# ERCOT 2020
+```{r, echo=FALSE}
+
+        
+  ercot%>%
+  subset(Year==2020)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Non-Spinning Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Non-Spinning Reserve-2020")
+  
+  
+  ercot%>%
+  subset(Year==2020)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Down Regulation")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Down Regulation-2020")
+
+
+  
+  ercot%>%
+  subset(Year==2020)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Non-Spinning Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Non-Spinning Reserve-2020")
+  
+  
+  
+  
+  ercot%>%
+  subset(Year==2020)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Responsive Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Responsive Reserve-2020")
+  
+  
+  
+```
+
+
+###ERCOT 2019  
+  
+```{r, echo=FALSE}
+
+
+        
+  ercot%>%
+  subset(Year==2019)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Non-Spinning Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Non-Spinning Reserve-2019")
+  
+  
+  ercot%>%
+  subset(Year==2019)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Down Regulation")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Down Regulation-2019")
+
+
+  
+  ercot%>%
+  subset(Year==2019)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Non-Spinning Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Non-Spinning Reserve-2019")
+  
+  
+  
+
+  ercot%>%
+  subset(Year==2019)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Responsive Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Responsive Reserve-2019")
+  
+
+
+```
+  
+###2018
+```{r, echo=FALSE}  
+
+        
+  ercot%>%
+  subset(Year==2018)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Non-Spinning Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Non-Spinning Reserve-2018")
+  
+  
+  ercot%>%
+  subset(Year==2018)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Down Regulation")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Down Regulation-2018")
+
+
+  
+  ercot%>%
+  subset(Year==2018)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Non-Spinning Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Non-Spinning Reserve-2018")
+  
+  
+
+  ercot%>%
+  subset(Year==2018)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Responsive Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Responsive Reserve-2018")
+  
+
+
+```
+
+### ERCOT 2017
+
+```{r, echo=FALSE}
+
+        
+  ercot%>%
+  subset(Year==2017)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Non-Spinning Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Non-Spinning Reserve-2017")
+  
+  
+  ercot%>%
+  subset(Year==2017)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Down Regulation")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Down Regulation-2017")
+
+
+  
+  ercot%>%
+  subset(Year==2017)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Non-Spinning Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Non-Spinning Reserve-2017")
+  
+  
+  
+
+  ercot%>%
+  subset(Year==2017)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Responsive Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Responsive Reserve-2017")
+  
+
+
+```
+
+
+
+###2016
+```{r, echo=FALSE}
+        
+  ercot%>%
+  subset(Year==2015)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Non-Spinning Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Non-Spinning Reserve-2015")
+  
+  
+  ercot%>%
+  subset(Year==2015)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Down Regulation")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Down Regulation-2015")
+
+
+  
+  ercot%>%
+  subset(Year==2015)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Non-Spinning Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Non-Spinning Reserve-2015")
+  
+  
+  
+
+  ercot%>%
+  subset(Year==2015)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Responsive Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Responsive Reserve-2015")
+  
+
+
+```
+
+
+
+
+
+###MISO 
+
+
+
+#2016 [no values above $200/MWh]
+```{r, echo=FALSE}
+  miso%>%
+  subset(Year==2016)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Gen - Regulation")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Gen - Regulation-2016")
+  
+  miso%>%
+  subset(Year==2016)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Gen - 10 Minute Spinning Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Gen - 10 Minute Spinning Reserve-2016")
+  
+  
+  miso%>%
+  subset(Year==2016)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Gen - 10 Minute Supplemental")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Gen - 10 Minute Supplemental-2016")  
+  
+  miso%>%
+  subset(Year==2016)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Stored Energy Reserve")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Stored Energy Reserve-2016")  
+  
+  miso%>%
+  subset(Year==2016)%>%
+  subset( Price...MWh > 1)%>%
+  subset(Price.Type.Full.Description== "RTH Regulation Mileage")%>%
+  ggplot(aes(x=Price...MWh))+
+  geom_freqpoly(color= "#00AFBB")+
+  xlab("$/MWh")+
+  ylab("Count of Total Hours")+
+  ggtitle("RTH Regulation Mileage-2016")  
+  
+
+```

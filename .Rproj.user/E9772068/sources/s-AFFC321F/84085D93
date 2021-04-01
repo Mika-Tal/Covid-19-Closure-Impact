@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1617237318346.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "84085D93",
+    "lastKnownWriteTime" : 1617170161,
+    "last_content_update" : 1617170161,
+    "path" : "C:/Users/clare/OneDrive/Desktop/KeyLogic/Energy_Storage/Ancillary/AS_seasons.Rmd",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "118,103",
+        "scrollLine" : "107"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 7,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

@@ -1,0 +1,2 @@
+"0","XGBPred=predict(xgb_model, testMTX)"
+"0","XGBRMSE = sqrt(mean ((testDeaths$new_deaths_per_100k - XGBPred) ^ 2 ) )"
