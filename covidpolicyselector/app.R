@@ -1,26 +1,9 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-# #Loading in the COVID Cases  data using CDC API
-# # URL Encode the query
-# q <- 'SELECT * FROM "395ca98e-75a4-407b-9b76-d2519da28c4a"'
-# formatQuery <- URLencode(q, repeated = TRUE)
-# # Build URL for GET request
-# url <- paste0("https://data.wprdc.org/api/3/action/datastore_search_sql?sql=", formatQuery)
-# # Run Get Request
-# g <- GET(url)
-# stations <- fromJSON(content(g, "text"))$result$records
-
-
 library(shiny)
 library(shinydashboard)
-library(httr) #used to query an API
-library(jsonlite) #used to query an API
+# library(httr) #used to query an API
+# library(jsonlite) #used to query an API
+library(tidyverse)
+library(DT)
 
 
 #Loading in the COVID Cases  data using CDC API
@@ -32,7 +15,7 @@ library(jsonlite) #used to query an API
 # g <- GET(url)
 # covid_cases <- fromJSON(content(g, "text"))$result$records
 
-
+covid_info <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/controls_and_outcomes.csv")[,-1]
 
 # Define UI for application that draws a histogram
 
@@ -66,11 +49,14 @@ body <- dashboardBody(tabItems(
             selectInput("policySelect",
                         label = "Choose a Non-Pharmecutical Intervention:",
                         choices = c("Closure of Bars", "Closure of Daycare", 
-                                    "Closure of Non-Essential Businesses")
-            )
-            
-            )
-    
+                                    "Closure of Restaurants")
+            ),
+        
+          
+        plotOutput(outputId = "policy_over_time"),
+        dataTableOutput(outputId = "policy_table")
+         
+    )
 )
     
     
@@ -82,7 +68,35 @@ ui <- dashboardPage(header, sidebar, body)
     
 # Define server logic required to draw a histogram
 server <- function(input, output) {
+    
+    policy_subset <- reactive({
+        covid_info %>% 
+            rename("Closure of Bars" = bars_closed,
+                   "Closure of Daycare" = day_care_closed,
+                   "Closure of Restaurants" = restaurants_closed) %>% 
+            select(submission_date, input$policySelect)
+                  
+    })
+    
+    output$policy_table <- DT::renderDataTable({
+        
+        DT::datatable(data = policy_subset(),
+                      rownames = FALSE)
+    })
 
+    output$policy_over_time <- renderPlot({
+
+        ggplot(policy_subset(), aes(x = as.Date(submission_date), y = input$policySelect)) +
+            geom_line(color = "blue")
+
+
+    })
+
+
+    
+            
+    
+      
     
 }
 
