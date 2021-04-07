@@ -1,0 +1,311 @@
+---
+title: "XGBoost_Deaths_ShortTimeSpan"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+#install.packages("xgboost")
+loadlibs = function(libs) {
+  for(lib in libs) {
+    class(lib)
+    if(!do.call(require,as.list(lib))) {install.packages(lib)}
+    do.call(require,as.list(lib))
+  }
+}
+libs = c("tidyverse","data.table","stargazer", "caret", "e1071",
+         "randomForest", "C50", "xgboost", "ggplot2", "cowplot")
+loadlibs(libs)
+```
+
+## Load the data & convert some data to factors
+```{r}
+#Load dataset -- For the short time analysis: I used the date range from March 1st to April 30th (helping us to analyze for hold long the association between COVID deaths and NPI's can actually hold)
+working_df <- read.csv("working_14days.csv") # 
+
+working_df <- working_df %>% 
+filter(as.Date(submission_date) >= as.Date("2020-03-01")
+         & as.Date(submission_date) < as.Date("2020-04-30")) %>% 
+  select(-c(1)) #removes the random "X" column that gets created when initially importing the dataset locally
+
+
+  # filter(submission_date >= as.Date("2020-03-01") & submission_date < as.Date("2020-04-30"))
+
+# subset the data to only include the outcome variable and the closure indicator variables
+deaths_df <- working_df %>%
+  select(new_deaths_per_100k, submission_date, state, c(85:92)) 
+
+#Check  the df structure
+str(deaths_df)
+
+#Convert the policy indicators to factors:
+deaths_df = deaths_df %>%
+  mutate_if(is.integer, as.factor)
+```
+
+
+## Create testing and training subsets
+```{r}
+set.seed(1)
+#generate random index list for training and test sets
+trainIndex = sample(1:nrow(deaths_df), 0.8 * nrow(deaths_df))
+#create train set 
+trainDeaths = deaths_df[trainIndex, ]
+#create test set
+testDeaths = deaths_df[-c(trainIndex), ]
+```
+
+## Create the matrices needed for XGBoost WITHOUT the submission date & state
+
+```{r}
+# convert features to matrix 
+trainMTX = model.matrix(new_deaths_per_100k~ . - submission_date - state, trainDeaths)[, -1]
+testMTX = model.matrix(new_deaths_per_100k ~ . - submission_date - state , testDeaths)[, -1]
+```
+
+## Model 3. XGBoost
+
+```{r}
+#Convert the predictor variable matrices to xgb.DMatrix data types
+xgb_train=xgb.DMatrix(trainMTX)
+xgb_test=xgb.DMatrix(testMTX)
+
+#Define random grid parameters for tuning the models
+XGBtc=trainControl(
+  method='cv',
+  number=5,
+  allowParallel=TRUE,
+  verboseIter=FALSE,
+  returnData=FALSE
+)
+# create grid for tuning hyperparameters
+XGBtg <- expand.grid(nrounds = c(20, 50, 100),
+                       max_depth = c(5, 10, 15),
+                       colsample_bytree = seq(0.5, 0.9, length.out = 5),
+                       eta = c(0.1, 0.2, 0.4),
+                       gamma=c(0, 2, 3),
+                       min_child_weight = 1,
+                       subsample = 0.75
+                      )
+
+```
+
+```{r, warning = FALSE, message = FALSE}
+# train model 
+xgb_model = train(
+  xgb_train, trainDeaths$new_deaths_per_100k,  
+  trControl = XGBtc,
+  tuneGrid = XGBtg,
+  method = "xgbTree")
+```
+
+
+```{r}
+# get hyperparameters of best model from grid search 
+xgb_model$bestTune
+```
+
+
+```{r}
+XGBPred = predict(xgb_model, xgb_test)
+XGBRMSE = sqrt(mean ((testDeaths$new_deaths_per_100k - XGBPred) ^ 2 ) )
+
+XGBRMSE
+
+```
+
+
+For the time period from March 1, 2020 to April 30, 2020, the RMSE of the "treatment" only variables is 0.5833348, when we only include the binary closure variables, which suggests that these variables only (SANS controls) are fairly good predictors of the incidence of new deaths. As a reference, the range of the new_deaths_per_100k variable is `r range(working_df$new_deaths_per_100k)`, which is from -9.319284 to 23.193353.
+
+
+
+## Step 2: Add in some of the control variables to this analysis
+```{r}
+
+#loads in the data again
+working_df <- read.csv("working_14days.csv")
+
+#converts the dataset
+working_df_subset <-
+  working_df %>% 
+  select(-c(1,18:35, 37:39, 45:60)) %>% 
+  #converting the percentages in the control variables
+  mutate(
+         Male = as.character(Male), 
+         Male = str_remove_all(Male, "%"), 
+         per.male = as.numeric(Male),
+         
+         Female = as.character(Female), 
+         Female  = str_remove_all(Female , "%"), 
+         per.female = as.numeric(Female),
+    
+         X65.years.and.over = as.character(X65.years.and.over), 
+         X65.years.and.over = str_remove_all(X65.years.and.over, "%"), 
+         per.65.and.over = as.numeric(X65.years.and.over),
+         
+         White = as.character(White), #change the demographic information to characters
+         White = str_remove_all(White, "%"), #removes the percentage signs
+         per.white = as.numeric(White), #converts to a numeric number (which is a percentage already)
+         
+         Black.or.African.American = as.character(Black.or.African.American), 
+         Black.or.African.American = str_remove_all(Black.or.African.American , "%"), 
+         per.black = as.numeric(Black.or.African.American),
+         
+         American.Indian.and.Alaska.Native = as.character(American.Indian.and.Alaska.Native), 
+         American.Indian.and.Alaska.Native = str_remove_all(American.Indian.and.Alaska.Native , "%"), 
+         per.amer.ind = as.numeric(American.Indian.and.Alaska.Native),
+         
+         Asian = as.character(Asian), 
+         Asian = str_remove_all(Asian , "%"), 
+         per.asian = as.numeric(Asian),
+         
+         Native.Hawaiian.and.Other.Pacific.Islander = as.character( Native.Hawaiian.and.Other.Pacific.Islander), 
+          Native.Hawaiian.and.Other.Pacific.Islander = str_remove_all( Native.Hawaiian.and.Other.Pacific.Islander , "%"), 
+         per.pac.isl = as.numeric(Native.Hawaiian.and.Other.Pacific.Islander)
+         
+         
+         )  %>% 
+  select(-c(15:22)) #removes the original columns for demographic information
+
+
+```
+
+##adding population density information
+```{r}
+df_control_only  <- 
+  working_df_subset %>% 
+  select(-c(3:12,15:38)) 
+
+
+#read in state area information
+state_area <- read.csv("state_area.csv")
+
+state_area <- state_area %>% 
+              filter(row_number() != 1) %>% #removes the total column
+              filter(row_number() != n()) 
+
+state_area <- state_area %>% 
+  select(-c(1,3,4)) %>% 
+  rename(state = "state_abrev")
+  
+```
+
+```{r, message = FALSE}
+#join the state_area dataset with the existing dataset
+
+df_control_combo <-
+  df_control_only %>%
+  left_join(state_area)
+
+#creating a new population density column
+df_control_combo <-
+  df_control_combo %>% 
+  mutate(Land_Area_Sq_MI = as.character(Land_Area_Sq_MI),
+         Land_Area_Sq_MI = str_remove_all(Land_Area_Sq_MI, ","),
+         Land_Area_Sq_MI = as.numeric(Land_Area_Sq_MI),
+         
+         Land_Area_Sq_KM = as.character(Land_Area_Sq_KM),
+         Land_Area_Sq_KM  = str_remove_all(Land_Area_Sq_KM , ","),
+         Land_Area_Sq_KM  = as.numeric(Land_Area_Sq_KM),
+         
+         #calculates the population density
+         pop.dens = Total.population/Land_Area_Sq_MI) %>% 
+  select(-c(25,26))
+
+
+#check the structure of the "df_control_combo" dataset
+#str(df_control_combo)
+
+#Convert the policy indicators to factors:
+df_control_combo <- df_control_combo%>%
+  mutate_if(is.integer, as.factor)
+
+#create a new .csv file with additional control columns
+#write.csv(df_control_combo,"~/Documents/GitHub/Covid-19-Closure-Impact/controls_and_outcomes.csv")
+
+
+```
+
+```{r}
+##removing the non- new_detaths_per_100k outcome variables
+df_control_combo <- df_control_combo %>% 
+  select(-c(14:16))
+
+
+#restrict the dataset to a certain date range
+df_control_combo <- df_control_combo %>% 
+filter(as.Date(submission_date) >= as.Date("2020-03-01")
+         & as.Date(submission_date) < as.Date("2020-04-30"))
+```
+
+
+## Create testing and training subsets
+```{r}
+set.seed(1)
+#generate random index list for training and test sets
+trainIndex = sample(1:nrow(df_control_combo), 0.8 * nrow(df_control_combo))
+#create train set 
+trainDeaths = df_control_combo[trainIndex, ]
+#create test set
+testDeaths = df_control_combo[-c(trainIndex), ]
+```
+
+## Create the matrices needed for XGBoost WITHOUT the submission date & state
+
+```{r}
+# convert features to matrix 
+trainMTX = model.matrix(new_deaths_per_100k~ . - submission_date - state, trainDeaths)[, -1]
+testMTX = model.matrix(new_deaths_per_100k ~ . - submission_date - state , testDeaths)[, -1]
+```
+
+## Model 3. XGBoost
+
+```{r}
+#Convert the predictor variable matrices to xgb.DMatrix data types
+xgb_train=xgb.DMatrix(trainMTX)
+xgb_test=xgb.DMatrix(testMTX)
+
+#Define random grid parameters for tuning the models
+XGBtc=trainControl(
+  method='cv',
+  number=5,
+  allowParallel=TRUE,
+  verboseIter=FALSE,
+  returnData=FALSE
+)
+# create grid for tuning hyperparameters
+XGBtg <- expand.grid(nrounds = c(20, 50, 100),
+                       max_depth = c(5, 10, 15),
+                       colsample_bytree = seq(0.5, 0.9, length.out = 5),
+                       eta = c(0.1, 0.2, 0.4),
+                       gamma=c(0, 2, 3),
+                       min_child_weight = 1,
+                       subsample = 0.75
+                      )
+
+```
+
+```{r, warning = FALSE}
+# train model 
+xgb_model = train(
+  xgb_train, trainDeaths$new_deaths_per_100k,  
+  trControl = XGBtc,
+  tuneGrid = XGBtg,
+  method = "xgbTree")
+```
+
+
+```{r}
+# get hyperparameters of best model from grid search 
+xgb_model$bestTune
+```
+
+
+```{r}
+XGBPred = predict(xgb_model, testMTX)
+XGBRMSE = sqrt(mean ((testDeaths$new_deaths_per_100k - XGBPred) ^ 2 ) )
+
+XGBRMSE
+
+```
