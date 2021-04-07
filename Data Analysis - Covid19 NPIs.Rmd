@@ -21,15 +21,30 @@ loadlibs(libs)
 ```{r}
 #Load dataset
 working_df = read.csv("working_14days.csv") %>% 
-  filter(submission_date >= as.Date("2020-03-01") & submission_date < as.Date("2020-07-01"))
+  filter(submission_date >= as.Date("2020-03-01") & submission_date < as.Date("2020-05-01"))
 
 #Covid deaths outcome variable df
-deaths_df = working_df %>% 
+cases_df = working_df %>% 
   select(new_cases_per_100k, submission_date, state, c(85:92) )
 #Check  the df structure
-str(deaths_df)
+str(cases_df)
 #Convert the policy indicators to factors:
-deaths_df = deaths_df %>% 
+cases_df = cases_df %>% 
+  mutate_if(is.integer, as.factor)
+```
+
+```{r}
+#Load dataset
+working_df_long = read.csv("working_14days.csv") %>% 
+  filter(submission_date >= as.Date("2020-03-01") & submission_date < as.Date("2021-01-01"))
+
+#Covid deaths outcome variable df
+cases_df_long = working_df_long %>% 
+  select(new_cases_per_100k, submission_date, state, c(85:92) )
+#Check  the df structure
+str(cases_df_long)
+#Convert the policy indicators to factors:
+cases_df_long = cases_df_long %>% 
   mutate_if(is.integer, as.factor)
 ```
 ## Control Merges
@@ -46,17 +61,41 @@ deaths_df = deaths_df %>%
 ```{r}
 set.seed(1)
 #generate random index list for training and test sets
-trainIndex = sample(1:nrow(deaths_df), 0.8 * nrow(deaths_df))
+trainIndex = sample(1:nrow(cases_df), 0.8 * nrow(cases_df))
 #create train set 
-trainDeaths = deaths_df[trainIndex, ]
+trainCases = cases_df[trainIndex, ]
 #create test set
-testDeaths = deaths_df[-c(trainIndex), ]
+testCases = cases_df[-c(trainIndex), ]
 ```
 
 ```{r}
-# convert features to matrix 
-trainMTX=model.matrix(new_cases_per_100k~., trainDeaths)[, -1]
-testMTX=model.matrix(new_cases_per_100k~., testDeaths)[, -1]
+set.seed(1)
+#generate random index list for training and test sets
+trainIndex_long = sample(1:nrow(cases_df_long), 0.8 * nrow(cases_df_long))
+#create train set 
+trainCases_long = cases_df_long[trainIndex_long, ]
+#create test set
+testCases_long = cases_df_long[-c(trainIndex_long), ]
+```
+
+```{r}
+# convert features to matrix - with date 
+trainMTX=model.matrix(new_cases_per_100k~., trainCases)[, -1]
+testMTX=model.matrix(new_cases_per_100k~., testCases)[, -1]
+
+#Convert features to matric -w/o date
+trainMTX_policiesOnly = model.matrix(new_cases_per_100k~. -submission_date -state, trainCases)[, -1]
+testMTX_policiesOnly = model.matrix(new_cases_per_100k~. -submission_date -state, testCases)[, -1]
+```
+
+```{r}
+# convert features to matrix - with date 
+trainMTX_long=model.matrix(new_cases_per_100k~., trainCases_long)[, -1]
+testMTX_long=model.matrix(new_cases_per_100k~., testCases_long)[, -1]
+
+#Convert features to matric -w/o date
+trainMTX_policiesOnly_long = model.matrix(new_cases_per_100k~. -submission_date -state, trainCases_long)[, -1]
+testMTX_policiesOnly_long = model.matrix(new_cases_per_100k~. -submission_date -state, testCases_long)[, -1]
 ```
 
 ## Correlation Plot - for continuous variables
@@ -66,9 +105,11 @@ testMTX=model.matrix(new_cases_per_100k~., testDeaths)[, -1]
 
 ``` 
 
-#Variable Frequency - for categorical variables 
+## Variable Frequency - for categorical variables 
 ```{r}
-#Should add)
+graph = trainCases %>% 
+  select(c(4:11)) %>% 
+  ggpairs
 ```
 
 # Modelling 
@@ -95,7 +136,7 @@ modellist = list()
 #Train the Model
 for (ntree in c(1000,1500,2000,2500)){
   rfModel = train(new_cases_per_100k ~ . -submission_date -state,
-                  trainDeaths,
+                  trainCases,
                   method = "rf",
                   metric = "RMSE",
                   trControl = tc,
@@ -124,8 +165,8 @@ ggplot(trainResults, aes(x = ntrees, y = RMSE)) +
 
 ```{r}
 #Predict results using ntre = 2500 and mtry = 4
-rfPred = predict(modellist$"2500", newdata = testDeaths)
-rfRMSE = sqrt(mean ( (testDeaths$new_cases_per_100k - rfPred) ^ 2 ) )
+rfPred = predict(modellist$"2000", newdata = testCases)
+rfRMSE = sqrt(mean ( (testCases$new_cases_per_100k - rfPred) ^ 2 ) )
 ```
 
 Questions: 
@@ -137,8 +178,14 @@ Questions:
 
 ```{r}
 #Convert the predictor variable matrices to xgb.DMatrix data types
-xgb_train=xgb.DMatrix(trainMTX)
-xgb_test=xgb.DMatrix(testMTX)
+XGBTrain = xgb.DMatrix(trainMTX)
+XGBTest = xgb.DMatrix(testMTX)
+XGBTrain_polsOnly = xgb.DMatrix(trainMTX_policiesOnly)
+XGBTest_polsOnly = xgb.DMatrix(testMTX_policiesOnly)
+XGBTrain_long = xgb.DMatrix(trainMTX_long)
+XGBTest_long = xgb.DMatrix(testMTX_long)
+XGBTrain_polsOnly_long = xgb.DMatrix(trainMTX_policiesOnly_long)
+XGBTest_polsOnly_long = xgb.DMatrix(testMTX_policiesOnly_long)
 
 #Define random grid parameters for tuning the models
 XGBtc=trainControl(
@@ -160,25 +207,74 @@ XGBtg <- expand.grid(nrounds = c(20, 50, 100),
 
 ```
 
+### Cases - March through April with Date and State
 ```{r warning = FALSE}
-# train model 
-xgb_model = train(
-  xgb_train, trainDeaths$new_cases_per_100k,  
+# train model - with dates and state 
+XGBModel_short = train(
+  XGBTrain, trainCases$new_cases_per_100k,  
   trControl = XGBtc,
   tuneGrid = XGBtg,
   method = "xgbTree")
 ```
 
+```{r}
+# get hyperparameters of best model from grid search 
+XGBModel_short$bestTune
+```
+
+```{r}
+XGBPred_short=predict(XGBModel_short, XGBTest)
+XGBRMSE_short = sqrt(mean ((testCases$new_cases_per_100k - XGBPred_short) ^ 2 ) )
+```
+
+### Cases - March through April only indicators 
+```{r warning = FALSE}
+# train model - only policies 
+XGBModel_polsOnly = train(
+  XGBTrain_polsOnly, trainCases$new_cases_per_100k,  
+  trControl = XGBtc,
+  tuneGrid = XGBtg,
+  method = "xgbTree")
+```
 
 ```{r}
 # get hyperparameters of best model from grid search 
-xgb_model$bestTune
+XGBModel_polsOnly$bestTune
 ```
 
+```{r}
+XGBPred_polsOnly=predict(XGBModel_polsOnly, XGBTest_polsOnly)
+XGBRMSE_polsOnly = sqrt(mean ((testCases$new_cases_per_100k - XGBPred_polsOnly) ^ 2 ) )
+```
+
+### Cases - March through December with date and state
+```{r warning = FALSE}
+# train model - with dates and state 
+XGBModel = train(
+  XGBTrain_long, trainCases_long$new_cases_per_100k,  
+  trControl = XGBtc,
+  tuneGrid = XGBtg,
+  method = "xgbTree")
+```
 
 ```{r}
-XGBPred=predict(xgb_model, testMTX)
-XGBRMSE = sqrt(mean ((testDeaths$new_cases_per_100k - XGBPred) ^ 2 ) )
+# get hyperparameters of best model from grid search 
+XGBModel$bestTune
+```
+
+```{r}
+XGBPred_long=predict(XGBModel, XGBTest_long)
+XGBRMSE_long = sqrt(mean ((testCases$new_cases_per_100k - XGBPred_long) ^ 2 ) )
+```
+
+### Cases - March through December indicators only
+```{r warning = FALSE}
+# train model - only policies 
+XGBModel_polsOnly_long = train(
+  XGBTrain_polsOnly_long, trainCases_long$new_cases_per_100k,  
+  trControl = XGBtc,
+  tuneGrid = XGBtg,
+  method = "xgbTree")
 ```
 
 1. If XGBoost is performing this well on unseen data- do we need to add more variables? 
