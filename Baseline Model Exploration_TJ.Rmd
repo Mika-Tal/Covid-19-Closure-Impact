@@ -1,0 +1,244 @@
+---
+title: "Baseline Model Exploration"
+date: "3/26/2021"
+output: html_document
+---
+
+```{r, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(lubridate)
+library(ggcorrplot)
+library(GGally)
+library(glmnet) # to perform L1 regularization
+
+options(scipen = 999)
+
+#read in 14 days .csv file
+working_df <- read.csv("working_14days.csv")
+```
+
+
+
+##Baseline Model Analysis
+
+## Model 1: Regularized (L1 - LASSO) Linear Regression Model
+
+
+
+### Step 1: Clean up the data on the demographic indicators
+
+
+```{r}
+
+#convert the demographic information to 
+working_df_subset <-
+  working_df %>% 
+  select(-c(1,18:35, 37:39, 45:60)) %>% 
+  #converting the percentages in the control variables
+  mutate(
+         Male = as.character(Male), 
+         Male = str_remove_all(Male, "%"), 
+         per.male = as.numeric(Male),
+         
+         Female = as.character(Female), 
+         Female  = str_remove_all(Female , "%"), 
+         per.female = as.numeric(Female),
+    
+         X65.years.and.over = as.character(X65.years.and.over), 
+         X65.years.and.over = str_remove_all(X65.years.and.over, "%"), 
+         per.65.and.over = as.numeric(X65.years.and.over),
+         
+         White = as.character(White), #change the demographic information to characters
+         White = str_remove_all(White, "%"), #removes the percentage signs
+         per.white = as.numeric(White), #converts to a numeric number (which is a percentage already)
+         
+         Black.or.African.American = as.character(Black.or.African.American), 
+         Black.or.African.American = str_remove_all(Black.or.African.American , "%"), 
+         per.black = as.numeric(Black.or.African.American),
+         
+         American.Indian.and.Alaska.Native = as.character(American.Indian.and.Alaska.Native), 
+         American.Indian.and.Alaska.Native = str_remove_all(American.Indian.and.Alaska.Native , "%"), 
+         per.amer.ind = as.numeric(American.Indian.and.Alaska.Native),
+         
+         Asian = as.character(Asian), 
+         Asian = str_remove_all(Asian , "%"), 
+         per.asian = as.numeric(Asian),
+         
+         Native.Hawaiian.and.Other.Pacific.Islander = as.character( Native.Hawaiian.and.Other.Pacific.Islander), 
+          Native.Hawaiian.and.Other.Pacific.Islander = str_remove_all( Native.Hawaiian.and.Other.Pacific.Islander , "%"), 
+         per.pac.isl = as.numeric(Native.Hawaiian.and.Other.Pacific.Islander)
+         
+         
+         )  %>% 
+  select(-c(15:22)) #removes the original columns for demographic information
+
+
+```
+
+
+### Step 2: Isolate the data to only include the outcome variables and the control variables
+
+```{r}
+df_control_only  <- 
+  working_df_subset %>% 
+  select(-c(3:12,15:38)) 
+
+
+#read in state area information
+state_area <- read.csv("state_area.csv")
+
+state_area <- state_area %>% 
+              filter(row_number() != 1) %>% #removes the total column
+              filter(row_number() != n()) 
+
+state_area <- state_area %>% 
+  select(-c(1,3,4)) %>% 
+  rename(state = "state_abrev")
+  
+```
+
+```{r, message = FALSE}
+#join the state_area dataset with the existing dataset
+
+df_control_combo <-
+  df_control_only %>%
+  left_join(state_area)
+
+#creating a new population density column
+df_control_combo <-
+  df_control_combo %>% 
+  mutate(Land_Area_Sq_MI = as.character(Land_Area_Sq_MI),
+         Land_Area_Sq_MI = str_remove_all(Land_Area_Sq_MI, ","),
+         Land_Area_Sq_MI = as.numeric(Land_Area_Sq_MI),
+         
+         Land_Area_Sq_KM = as.character(Land_Area_Sq_KM),
+         Land_Area_Sq_KM  = str_remove_all(Land_Area_Sq_KM , ","),
+         Land_Area_Sq_KM  = as.numeric(Land_Area_Sq_KM),
+         
+         #calculates the population density
+         pop.dens = Total.population/Land_Area_Sq_MI) %>% 
+  select(-c(25,26))
+
+```
+
+**We still need to clean the outcome variables to make sure they are recording the right information.**
+
+### Check for Collinearity
+
+```{r, fig.height = 8, fig.width = 8}
+# Drop gender, ltv
+control_corr<- subset(df_control_combo, select = -c(submission_date, state, political.party.affilation))
+
+# # Correlation matrix
+corr <- cor(control_corr)
+corr
+
+# # Pairs plot
+# ggpairs(control_corr,
+#         title = "Predictors Pairs Plot")
+# 
+# Correlation plot
+ggcorrplot(corr,
+           lab = TRUE, 
+           lab_size = 2,
+           title = "Predictor Correlation Plot")
+```
+
+
+## Step 2: Select the date range of interest
+
+```{r}
+df_control_combo <-
+  df_control_combo %>% 
+  filter(as.Date(submission_date) >= as.Date("2020-03-01")
+         & as.Date(submission_date) < as.Date("2020-07-01"))
+```
+
+
+##Step 3: Apply LASSO regularization (L1 regularization) to select the important control variables 
+
+```{r}
+
+df_subset <-
+  df_control_combo %>% 
+  select(-c(1,2,4,13,15,16))
+
+#creating the response vector and the covariates matrix
+x <- model.matrix(new_cases_per_100k ~ ., df_subset)[,-1]
+y <- df_subset$new_cases_per_100k
+
+
+```
+
+
+```{r}
+#picking the best value for lambda
+lasso_results <- cv.glmnet(x, y, alpha = 1)
+
+#lambda within one standard error of the lowest value of lambda
+one_se_lambda <- lasso_results$lambda.1se
+
+
+all_vars <- coef(lasso_results, s = one_se_lambda)
+#determines which variables will have a non-zero coefficients
+selected_vars <- rownames(all_vars)[all_vars[,1] != 0]
+
+
+```
+
+The variables selected through LASSO regularization were `r selected_vars[-1]`.
+
+**still need to do validation set comparison**
+
+
+```{r}
+
+
+# #fitting a linear regression with LASSO model
+# 
+# lasso.fit <- glmnet(x, y,)
+# 
+# plot(lasso.fit, xvar = "norm", label = TRUE)
+```
+
+
+## Step 4: Split the data into a training and testing set
+
+```{r}
+set.seed(2022)
+
+train_index <- sample(1:nrow(df_control_combo), 0.5 * nrow(df_control_combo))
+
+train_df <- df_control_combo[train_index,]
+test_df <- df_control_combo[-train_index,]
+```
+
+
+Step 5: Re-run linear regression to get coefficient estimates on the variables that are interpretable
+Step 6: After the control-only baseline model was run, then the user would be able to select the non-pharmaceutical interventions that they want 
+
+
+
+
+```{r}
+
+names(working_df)
+
+#do we need the date of the closures/openings once we've used them to create the binary variables?
+#there is some demographic information that I think that we can eliminate as well
+
+
+#how do we take the time dimension into account?
+
+# working_df_subset %>% 
+  working_df
+
+```
+
+
+
+
+
+
+
+
