@@ -18,9 +18,9 @@ library(glmnet) # to perform L1 regularization
 # g <- GET(url)
 # covid_cases <- fromJSON(content(g, "text"))$result$records
 
-#covid_info <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/controls_and_outcomes.csv")[,-1]
+covid_info <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/controls_and_outcomes.csv")[,-1]
 
-covid_info_2 <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Covid_Pred.csv")
+#covid_info <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Covid_Pred.csv")
 
 
 # Define UI for application that draws a histogram
@@ -128,18 +128,33 @@ body <- dashboardBody(
    tabItem("merging",
            
            #shows what control features are available to be used
-           checkboxInput(inputId = "display table with control data",
+           checkboxInput(inputId = "yes_control",
                          label = "Do you want to see what control features are available?"),
            
+           #only allows user to see a data table with the control features if checkbox is checked
+           conditionalPanel(condition = "input.yes_control",
+                            dataTableOutput(outputId = "controls_only")),
+             
+             
            
-           dataTableOutput(outputId = "controls_only"),
+        
            
            #determines what dataset will be fed into the feature selection & used for modeling
            #asks the user whether to combine their features with our set of control features
            checkboxInput(inputId = "yes_merge",
-                         label = "Check to Combine Your Data With Our Control Features")
+                         label = "Do you want to combine your data with our control features?"),
            
            
+           #only allows user to see select control features if checkbox is checked
+           conditionalPanel(condition = "input.yes_merge",
+                            selectInput(inputId = "select_controals",
+                                        label = "Select the control features you would like to use",
+                                        choices = names(covid_info),
+                                        multiple = TRUE,
+                                        selected = names(covid_info)[1:5])
+                              ),
+           
+           #select which features you would like to use from the provided set of control features
           
            
            ),
