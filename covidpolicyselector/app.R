@@ -18,7 +18,10 @@ library(glmnet) # to perform L1 regularization
 # g <- GET(url)
 # covid_cases <- fromJSON(content(g, "text"))$result$records
 
-covid_info <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/controls_and_outcomes.csv")[,-1]
+#covid_info <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/controls_and_outcomes.csv")[,-1]
+
+covid_info_2 <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Covid_Pred.csv")
+
 
 # Define UI for application that draws a histogram
 
@@ -34,7 +37,8 @@ sidebar <- dashboardSidebar(
         id = "tabs",
         
         #Menu Items--------------------------
-        menuItem("Overview & Data Pre-Processing", tabName = "overview"),
+        menuItem("Overview & Data Ingestion", tabName = "overview"),
+        menuItem("Data Merging", tabName = "merging"),
         menuItem("Feature Selection", tabName = "features"),
         menuItem("Model Building ", tabName = "model")
     )
@@ -119,6 +123,26 @@ body <- dashboardBody(
           #data table ------
           #div(dataTableOutput(outputId = "overall_data")) #style = "font-size: 75%; width: 75%")
   ),
+  
+  #Data Merging Page 
+   tabItem("merging",
+           
+           #shows what control features are available to be used
+           checkboxInput(inputId = "display table with control data",
+                         label = "Do you want to see what control features are available?"),
+           
+           
+           dataTableOutput(outputId = "controls_only"),
+           
+           #determines what dataset will be fed into the feature selection & used for modeling
+           #asks the user whether to combine their features with our set of control features
+           checkboxInput(inputId = "yes_merge",
+                         label = "Check to Combine Your Data With Our Control Features")
+           
+           
+          
+           
+           ),
     
     #Feature Selection page ---------------------
     tabItem("features",
