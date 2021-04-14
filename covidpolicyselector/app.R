@@ -59,6 +59,14 @@ body <- dashboardBody(
           # welcome message & introduction to shiny app ---------------
           textOutput(outputId = "welcome"),
           
+          #changed how the welcome message should display--------
+          tags$head(tags$style("#welcome{color: blue;
+                                 font-size: 20px;
+                                 font-style: italic;
+                                 }"
+          )
+          ),
+          
           #adds visual space between the page elements
           br(),
           
@@ -239,7 +247,7 @@ server <- function(input, output) {
   
   output$welcome <- renderText({
     
-    "<Placeholder for welcome message>"
+    "Hello! Welcome to our Machine Learning Pipeline Visualization App. To get started, <placeholder for more text .....>"
   })
   
   output$contents <- renderDataTable({
