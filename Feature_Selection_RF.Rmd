@@ -1,0 +1,78 @@
+---
+title: "Feature_Select_RF"
+author: "ClareCallahan"
+date: "4/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+loadlibs = function(libs) {
+  for(lib in libs) {
+    class(lib)
+    if(!do.call(require,as.list(lib))) {install.packages(lib)}
+    do.call(require,as.list(lib))
+  }
+}
+libs = c("tidyverse","data.table","stargazer", "knitr", "shiny",
+         "tidymodels", "lubridate", "rpart.plot", "caret", "e1071",
+         "readxl", "fuzzyjoin", "mgcv", "randomForest")
+loadlibs(libs)
+```
+
+```{r}
+setwd("~/GitHub/Covid-19-Closure-Impact/Data")
+
+df<-read.csv('Covid_Pred.csv')
+
+
+df$submission_date<-as.Date(df$submission_date, format="%m/%d/%Y")
+
+#df$submission_date<- as.Date(as.character(df$submission_date), format="%m/%d/%Y")
+
+
+
+
+#Dropping the N/A columns as accounted for with the one hot encoding columns (and pervents RF)
+
+df<- df[, colSums(is.na(df))==0]
+
+
+df$state<-droplevels(df)$state
+str(df)
+```
+
+## Test/Train split
+```{r}
+#df1 = df %>%
+ # mutate_if(is.character, as.factor) #%>% 
+  #mutate_if(is.factor, forcats::fct_lump_min, min=100) 
+#df1$new_cases<- as.factor(df1$new_cases)
+
+t<- as.numeric(count(df)*.75)
+
+set.seed(12345) 
+df2 = df[sample(1:nrow(df)),]
+train = df2[1:t,]
+test = df2[-(1:t),]
+
+
+
+```
+
+
+```{r}
+#did not end up using train & test as not testing accuracy of feature selection for the time being
+rf <- randomForest(
+  new_cases ~ .,
+  data=df
+)
+
+varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
+           type=NULL, class=NULL, scale=TRUE, 
+           main=deparse(substitute(rf))) 
+
+
+
+#https://towardsdatascience.com/random-forest-in-r-f66adf80ec9
+```
+
