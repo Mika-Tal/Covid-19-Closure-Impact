@@ -1,3 +1,10 @@
+#install necessary libraries
+#Install Delphi R package from below
+#https://cmu-delphi.github.io/covidcast/covidcastR/articles/covidcast.html
+# #installs the COVIDCast API information
+# devtools::install_github("cmu-delphi/covidcast", ref = "main",
+#                          subdir = "R-packages/covidcast")
+
 #Load in necessary libraries
 
 library(shiny)
@@ -5,48 +12,14 @@ library(shinydashboard)
 library(tidyverse)
 library(DT)
 # library(plotly) #used to create interactive plots
-library(glmnet) # to perform L1 regularization
-
-
-# #installs the COVIDCast API information
-# devtools::install_github("cmu-delphi/covidcast", ref = "main",
-#                          subdir = "R-packages/covidcast")
-
+#library(glmnet) # to perform L1 regularization
+library(tidymodels)
 library(covidcast)
+library(lubridate)
 
-#To do:
-# 1. ADD IN OTHER LIBRARIES THAT WE ARE USING FOR THIS APP
-
-
-covid_info <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Covid_Pred.csv")
-
-
-#create controls only .csv
-
-controls <- c("paid_sick_leave", "medicade_expansion", "Population_density", 
-              "Population_2018", "Number_Homeless_2019", 
-              "Percent_living_under_the_federal_poverty_line_2018", 
-              "Percent_at_risk_for_serious_illness_due_to_COVID", "X65_and_over", 
-              "White", "Black", "American_Indian", "Asian", 
-              "Native_Hawaiian_Pacific_Islander", "Other", 
-              "Majority_Dem", "Majority_Rep")
-
-controls_only_df <- covid_info %>% 
-  select(state, all_of(controls)) %>% 
-  group_by(state) %>% 
-  slice(1)
-
-
-#create features of interest .csv
-exp_features <- covid_info %>%
-  select(-c(all_of(controls))) %>% 
-  select(-c(5,9:17)) #removes columns with dates instead of indicator variables
-
-#write a csv of the experimental features for the project
-#write.csv(exp_features, "expfeatures.csv")
-
-
-# Define UI for application that draws a histogram
+#read in static datasets -- controls only and the sample user input data
+state_controls <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/state_controls.csv")
+user_input_example <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/user_input_policies_full_example.csv")
 
 #Dashboard Header & Title ---------------------------------------------------------
 header <- dashboardHeader(title = "Machine Learning Pipeline Visualization Using COVID-19 Data",
@@ -60,11 +33,11 @@ sidebar <- dashboardSidebar(
     id = "tabs",
     
     #Menu Items--------------------------
-    menuItem("Overview & Data Ingestion", tabName = "overview"),
-    menuItem("Data Merging", tabName = "merging"),
-    menuItem("Missingness Check", tabName = "missing"),
-    menuItem("Feature Selection", tabName = "features"),
-    menuItem("Model Building ", tabName = "model")
+    menuItem("Overview & Data Ingestion", tabName = "overview") #,
+    # menuItem("Data Merging", tabName = "merging"),
+    # menuItem("Missingness Check", tabName = "missing"),
+    # menuItem("Feature Selection", tabName = "features"),
+    # menuItem("Model Building ", tabName = "model")
   )
 )
 
@@ -106,6 +79,12 @@ body <- dashboardBody(
                            end = "2021-03-01",
                            format = "yyyy-mm-dd",
                            separator = "-"),
+            
+            #outcome choice (cases or deaths)
+            selectInput("outcome_variable", "Choose An Outcome Variable To Forecast:",
+                        c("New Cases per 100,000 People" = "confirmed_7dav_incidence_prop",
+                          "Deaths per 100,000 People" = "deaths_7dav_incidence_prop")),
+            
             
             
             #adds visual space between the page elements
@@ -176,30 +155,30 @@ body <- dashboardBody(
                                                   "text/comma-separated-values,text/plain",
                                                   ".csv")
                              ),
-                             
+
                              # Horizontal line ----
                              tags$hr(),
-                             
+
                              # Input: Checkbox if file has header ----
                              checkboxInput("header", "Is there a header in your data?", TRUE),
-                             
+
                              # Input: Select separator ----
                              radioButtons("sep", "How is your data separated?",
                                           choices = c(Comma = ",",
                                                       Semicolon = ";",
                                                       Tab = "\t"),
                                           selected = ","),
-                             
+
                              # Input: Select quotes ----
                              radioButtons("quote", "Quote",
                                           choices = c(None = "",
                                                       "Double Quote" = '"',
                                                       "Single Quote" = "'"),
                                           selected = '"'),
-                             
+
                              # Horizontal line ----
                              tags$hr(),
-                             
+
                              # Input: Select number of rows to display ----
                              radioButtons("disp", "How many rows would you like to display?",
                                           choices = c("First 5 Rows" = "head",
@@ -240,9 +219,9 @@ body <- dashboardBody(
                              conditionalPanel(condition = "input.all_controls == 'No'",
                                               selectInput(inputId = "select_controls",
                                                           label = "Select the control features you would like to use:",
-                                                          choices = names(controls_only_df)[-1],
+                                                          choices = names(state_controls)[-1],
                                                           multiple = TRUE,
-                                                          selected = names(controls_only_df)[2:5])
+                                                          selected = names(state_controls)[2:5])
                              )),
             
             #displays the resulting dataTable from merging
@@ -273,11 +252,11 @@ body <- dashboardBody(
     tabItem("features",
             
             
-            #select the input for the outcome variable of interest (everything else will be the features)
-            selectInput("outcome",
-                        label = "Choose outcome variable of interest:",
-                        choices = names(covid_info)),
-            
+            # #select the input for the outcome variable of interest (everything else will be the features)
+            # selectInput("outcome",
+            #             label = "Choose outcome variable of interest:",
+            #             choices = names(covid_info)),
+            # 
             #allows the user to decide how to create the training subset -----------------------------------
             radioButtons(inputId = "train_decide",
                          label = "How do you want to train your data?",
@@ -332,54 +311,72 @@ server <- function(input, output) {
   })
   
   
-  #when the action button is pushed, query the CMU Delphi API
-  observeEvent(input$queryAPI, {
+
+  
+  #creates a function for querying the API
+  query_API_fun <- function(start_date, end_date, outcome_variable) {
     
-    
+
     #queries the delphi API based on the input from the user
-    delphi_results <- suppressMessages(
+    covid_data <-
       covidcast_signal(data_source = "indicator-combination",
-                       signal = "confirmed_7dav_incidence_prop",
-                       start_day = input$dates_of_interest[1], #sets the data queried to user inputs
-                       end_day = input$dates_of_interest[2],
-                       geo_type = "state")
-    )
+                       signal = outcome_variable,
+                       start_day =  start_date, #sets the data queried to user inputs
+                       end_day = end_date ,
+                       geo_type = "state") %>% 
+      
+      #conduct necessary data transformations
+      select("geo_value", "time_value","value") %>%
+      rename(State = geo_value, 
+             Day = time_value , 
+             outcome_variable = value) %>%
     
-    #capitalizes the state column of the delphi_results dataFrame for easier merging
-    delphi_results$geo_value <- toupper(delphi_results$geo_value)
+
+      mutate(
+        Year = strftime(Day , format = "%Y"),
+        Week = strftime(Day , format = "%V"),
+        State = toupper(State)
+      ) %>%
+      group_by(State, Year, Week) %>%
+
+      summarize(
+
+        `Outcome Variable` = mean(outcome_variable)
+      )
     
+    return(covid_data)
     
-    # delphi_results_edit <- reactive({
+  }
+  
+  
+#when the action button is pushed, query the CMU Delphi API
+  covid_dataset <- eventReactive(input$queryAPI, {
     
-    delphi_results_edit <-
-      delphi_results %>%
-      select("geo_value", "time_value", "value") %>%
-      rename("state" = "geo_value",
-             "date" = "time_value",
-             "New Cases Per 100k" = "value" )
+    start_date = input$dates_of_interest[1]
+    end_date = input$dates_of_interest[2]
+    outcome_variable = input$outcome_variable
     
-    # #%>%
-    #   mutate (Week = strftime(Day , format = "%V"),
-    #           State = toupper(State)) %>%
-    #   group_by(State, Week) %>%
-    #   summarize(Average_Daily_Cases_per_100k = mean(Cases_per_100k))
-    # 
+    #call function to query the API
+    query_API_fun(start_date, end_date, outcome_variable)
+    
+  })
+
     
     
     #placeholder for displaying whatever datatable results from querying the API
     output$api_results <- renderDataTable({
-      DT::datatable(data = delphi_results_edit,
+      DT::datatable(data = covid_dataset(),
                     rownames = FALSE, options = list(scrollX = T))
     })
     
-  })
+
   
   
   
   
   output$controls_only <- renderDataTable({
     
-    DT::datatable(data = controls_only_df,
+    DT::datatable(data = state_controls,
                   rownames = FALSE,
                   options = list(scrollX = T))
   })
@@ -390,44 +387,48 @@ server <- function(input, output) {
     filename = "Data_Ingestion_Template.csv",
     content = function(file) {
       
-      write.csv(delphi_results, file, row.names = FALSE) #***change the file that is downloaded
+      write.csv(user_input_example, file, row.names = FALSE) #***change the file that is downloaded
     }
   )
   
+
+  #creates reactive variable for the data uploaded by the user to the shiny platform
+  userdata <- reactive({
+    infile <- input$file1
+    if (is.null(infile)) {
+      # User has not uploaded a file yet
+      return(NULL)
+    }
+    user_df <-  read.csv(infile$datapath,
+                         header = input$header,
+                         sep = input$sep,
+                         quote = input$quote)
+    
+    user_df <- user_df %>%    mutate(
+      Date = as.Date(Date, format = "%m/%d/%Y"),
+      Year = strftime(Date , format = "%Y"),
+      Week = strftime(Date , format = "%V"),
+      State = toupper(State)
+    ) %>% 
+      
+      group_by(State, Year, Week) %>% 
+      summarise_each(funs(mean)) %>% subset(select = -c(Date)) %>%  mutate_if(is.numeric, ~round(., 0))
+  })
+  
   output$contents <- renderDataTable({
-    
-    
-    #need this file in order to produce your desired output
-    req(input$file1)
-    
-    tryCatch(
-      {
-        df_upload <- read.csv(input$file1$datapath,
-                              header = input$header,
-                              sep = input$sep,
-                              quote = input$quote)
-        
-      },
-      error = function(e) {
-        # return a safeError if a parsing error occurs
-        stop(safeError(e))
-      }
-    )
     
     if(input$disp == "head") {
       
       #display the datatable
-      DT::datatable(data = head(df_upload)[-1],
+      DT::datatable(data = head(userdata()),
                     rownames = FALSE, options = list(scrollX = T))
       
     }
     else {
       
       #display the data table
-      DT::datatable(data = df_upload[-1],
+      DT::datatable(data = userdata(),
                     rownames = FALSE, options = list(scrollX = T))
-      
-      
       
     }
     
@@ -435,9 +436,9 @@ server <- function(input, output) {
   
   
   # Data Merging Page Output ---------------------------------------------------------
-  # delphi_results_edit
-  # df_upload
-  # controls_only_df 
+  # covid_dataset()
+  # userdata()
+  # state_controls 
   
   output$merged <- renderUI({
     
@@ -471,7 +472,7 @@ server <- function(input, output) {
                    
                    #subsetting the controls to only the controls selected by the user
                    sel_ctrl_df <- 
-                     controls_only_df %>% 
+                     state_controls %>% 
                      select(state, input$select_controls)
                    
                    dat <- 
@@ -491,7 +492,7 @@ server <- function(input, output) {
                    
                    dat <- 
                      delphi_results_edit %>% 
-                     left_join(controls_only_df, by = c("state" = "state"))
+                     left_join(state_controls, by = c("state" = "state"))
                    
                    #add merge for the uploaded data from the user
                    
@@ -534,17 +535,17 @@ server <- function(input, output) {
   
   #choices = c("Time Ordered", "Random Shuffling"),
   #for time ordered, would need to use top_n command 
-  
-  overall_data <- exp_features %>% 
-    left_join(controls_only_df, by = c("state")) %>% 
-    mutate(submission_date = as.Date(submission_date, format = "%m/%d/%Y"))
-  
-  #finding the last four data entries to filter the data into training and testing
-  most_recent_weeks <- tail(unique(overall_data$submission_date),2)
-  
-  overall_data_sub <- overall_data %>% 
-    filter(submission_date == most_recent_weeks[1] | submission_date == most_recent_weeks[2])
-  
+  # 
+  # overall_data <- exp_features %>% 
+  #   left_join(state_controls, by = c("state")) %>% 
+  #   mutate(submission_date = as.Date(submission_date, format = "%m/%d/%Y"))
+  # 
+  # #finding the last four data entries to filter the data into training and testing
+  # most_recent_weeks <- tail(unique(overall_data$submission_date),2)
+  # 
+  # overall_data_sub <- overall_data %>% 
+  #   filter(submission_date == most_recent_weeks[1] | submission_date == most_recent_weeks[2])
+  # 
   # if(input$train_decide == "Random Shuffling") {
   #   
   #   
