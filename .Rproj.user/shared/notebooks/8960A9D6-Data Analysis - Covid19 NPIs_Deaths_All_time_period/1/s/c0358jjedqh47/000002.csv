@@ -1,3 +1,0 @@
-"0","# convert features to matrix #exclude submission date if necesary"
-"0","trainMTX=model.matrix(new_deaths_per_100k~., trainDeaths)[, -1]"
-"0","testMTX=model.matrix(new_deaths_per_100k~., testDeaths)[, -1]"

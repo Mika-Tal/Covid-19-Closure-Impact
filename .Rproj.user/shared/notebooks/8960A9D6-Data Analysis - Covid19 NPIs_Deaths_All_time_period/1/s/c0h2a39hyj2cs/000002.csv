@@ -1,7 +1,0 @@
-"0","set.seed(1)"
-"0","#generate random index list for training and test sets"
-"0","trainIndex = sample(1:nrow(deaths_df), 0.8 * nrow(deaths_df))"
-"0","#create train set "
-"0","trainDeaths = deaths_df[trainIndex, ]"
-"0","#create test set"
-"0","testDeaths = deaths_df[-c(trainIndex), ]"

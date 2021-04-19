@@ -333,8 +333,8 @@ server <- function(input, output) {
         Year = strftime(Day , format = "%Y"),
         Week = strftime(Day , format = "%V"),
         State = toupper(State)
-      ) %>%
-      group_by(State, Year, Week) %>%
+      )  %>%
+      group_by(State, Year, Week, Day) %>%
 
       summarize(
 
@@ -470,6 +470,9 @@ server <- function(input, output) {
         left_join(control_data, by = c("State" = "State"))
 
       merged <- left_join(merged, user_data,  by=c("State","Year", "Week"), all.x = TRUE)
+      
+     # write.csv(merged,file = "~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_with_original_dates.csv")
+      
       return(merged)
     }
     
