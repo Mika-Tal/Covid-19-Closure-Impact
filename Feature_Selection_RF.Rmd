@@ -114,7 +114,7 @@ one<- as.character(top[1,1])
 
 
 
-gam_mod<-gam(y ~ s(gam one), data=df)
+#gam_mod<-gam(y ~ s(), data=df)
 
 #pruning random forest 
 
