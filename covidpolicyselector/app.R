@@ -16,6 +16,7 @@ library(DT)
 library(tidymodels)
 library(covidcast)
 library(lubridate)
+library(randomForest)
 
 #read in static datasets -- controls only and the sample user input data
 state_controls <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/state_controls.csv")
@@ -33,10 +34,10 @@ sidebar <- dashboardSidebar(
     id = "tabs",
     
     #Menu Items--------------------------
-    menuItem("Overview & Data Ingestion", tabName = "overview") #,
-    # menuItem("Data Merging", tabName = "merging"),
-    # menuItem("Missingness Check", tabName = "missing"),
-    # menuItem("Feature Selection", tabName = "features"),
+    menuItem("Overview & Data Ingestion", tabName = "overview") ,
+    menuItem("Data Merging", tabName = "merging"),
+    menuItem("Missingness Check", tabName = "missing"),
+    menuItem("Feature Selection", tabName = "features")
     # menuItem("Model Building ", tabName = "model")
   )
 )
@@ -237,7 +238,7 @@ body <- dashboardBody(
             #add visual space
             br(),
             br(),
-            dataTableOutput(outputId = "merged_data")
+            dataTableOutput(outputId = "display_merged_data")
             
             
     ),
@@ -252,11 +253,7 @@ body <- dashboardBody(
     tabItem("features",
             
             
-            # #select the input for the outcome variable of interest (everything else will be the features)
-            # selectInput("outcome",
-            #             label = "Choose outcome variable of interest:",
-            #             choices = names(covid_info)),
-            # 
+
             #allows the user to decide how to create the training subset -----------------------------------
             radioButtons(inputId = "train_decide",
                          label = "How do you want to train your data?",
@@ -441,87 +438,104 @@ server <- function(input, output) {
   # state_controls 
   
   output$merged <- renderUI({
-    
-    
+  
     HTML(paste("Here's Your Merged Dataset:", sep = "<br/><br/>"))
     
   })
   
+  merge_dataset_fun <- function(covid_data, user_data = NULL, control_data = NULL){
+    
+    
+    if(is.null(user_data) & !is.null(control_data)) {
+      merged <- covid_data %>% 
+        left_join(control_data, by = c("State" = "State"))
+      
+      return(merged)
+    }
+    
+    #If the user does not want to use our control data, then return merged covid and user data only
+    else if(!is.null(user_data) & is.null(control_data))  {
+      merged <- covid_data %>% 
+                left_join(user_data, by = c("State","Year", "Week"), all.x = TRUE)
+      
+        return(merged)
+      
+    }
   
+    #if the user wants to add = covid data + their own uploaded data + all or a selection of our controls
+    else if (!is.null(control_data) & !is.null(user_data)){
+
+      #join the covid data to the state controls data by joining on state
+      merged <- covid_data %>%
+        left_join(control_data, by = c("State" = "State"))
+
+      merged <- left_join(merged, user_data,  by=c("State","Year", "Week"), all.x = TRUE)
+      return(merged)
+    }
+    
+ 
+  }
   
+#creates a reactive dataframe including only the control features that the user selects
+only_sel_ctrls <- reactive({
+  state_controls %>% 
+    select(State, all_of(input$select_controls))
   
-  #only merge after clicking on the "merge" button
-  observeEvent(input$click_merge,
-               
-               
-               output$merged_data <- renderDataTable({
-                 
-                 # if(input$merge_decide == "No") {
-                 #   
-                 #   dat <- 
-                 #    delphi_results_edit %>% 
-                 #    left_join(df_upload, by = c("state" = "state", "date" = "submission_date"))
-                 #     
-                 #   DT::datatable(data = dat,
-                 #                 rownames = FALSE,
-                 #                 options = list(scrollX = T))
-                 #   
-                 # }
-                 
-                 if (input$all_controls == "No") {
-                   
-                   #subsetting the controls to only the controls selected by the user
-                   sel_ctrl_df <- 
-                     state_controls %>% 
-                     select(state, input$select_controls)
-                   
-                   dat <- 
-                     delphi_results_edit %>% 
-                     left_join(sel_ctrl_df, by = c("state" = "state"))
-                   
-                   #add merge for the uploaded data from the user
-                   
-                   DT::datatable(data = dat,
-                                 rownames = FALSE,
-                                 options = list(scrollX = T))
-                   
-                 }
-                 
-                 else {
-                   
-                   
-                   dat <- 
-                     delphi_results_edit %>% 
-                     left_join(state_controls, by = c("state" = "state"))
-                   
-                   #add merge for the uploaded data from the user
-                   
-                   DT::datatable(data = dat,
-                                 rownames = FALSE,
-                                 options = list(scrollX = T))
-                   
-                   
-                 }
-                 
-                 
-                 
-                 
-               })
-               
-  )
+})
   
-  #   
-  #   
-  # )
-  # 
-  # output$overall_data <- renderDataTable({
-  #   DT::datatable(data = covid_info,
-  #                   rownames = FALSE, options = list(scrollX = T))
-  #   
-  # })
-  #   
+ merged_dataset <- eventReactive(input$click_merge, {
+   
+   
+   if(input$merge_decide == "No" & is.null(userdata())) {
+     
+      dat <- covid_dataset()
+   }
+   
+   else if(input$merge_decide == "No" & !is.null(userdata())) {
+
+     merge_dataset_fun(covid_data = covid_dataset(), user_data = userdata())
+
+   }
+   
+   else if(input$merge_decide == "Yes" & input$all_controls == "Yes" & !is.null(userdata())) {
+
+    merge_dataset_fun(covid_dataset(), userdata(), state_controls)
+
+   }
+   
+   #if the user didn't upload any data
+   else if(input$merge_decide == "Yes" & input$all_controls == "Yes" & is.null(userdata()) ) {
+     
+     merge_dataset_fun(covid_data = covid_dataset(), control_data = state_controls)
+     
+   }
+
+   #if the user only wants to use a selection of our control features
+   else if(input$merge_decide == "Yes" & input$all_controls == "No" & !is.null(userdata())) {
+     
+     merge_dataset_fun(covid_dataset(), userdata(), only_sel_ctrls())
+
+   }
+   
+   #if the user didn't upload any data
+   else if(input$merge_decide == "Yes" & input$all_controls == "No" & is.null(userdata()) ) {
+     
+     merge_dataset_fun(covid_data = covid_dataset(), control_data = only_sel_ctrls())
+     
+   }
+
+  })
+ 
+ 
+ output$display_merged_data <- renderDataTable({
   
+   DT::datatable(data = merged_dataset(),
+                 rownames = FALSE,
+                 options = list(scrollX = T))
   
+ })
+ 
+
   #Missingness Imputation Page Output ---------------------------------------------
   
   
