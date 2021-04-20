@@ -92,9 +92,6 @@ plot(rf_gridsearch)
 
 
 ```{r}
-#did not end up using train & test as not testing accuracy of feature selection for the time being
-
-#change to 'outcome'
 
 rf <- randomForest(y ~ ., mtry= bestmtry_var, 
   data=df
@@ -110,22 +107,6 @@ features <-as.data.frame(setNames(cbind(rownames(features), features, row.names=
 
 top<- top_n(features, 10, features$NodPurity)
 #toplist<- as.list(top$Feature) #list variable did not work in gam
-one<- as.character(top[1,1])
-
-
-
-#gam_mod<-gam(y ~ s(), data=df)
-
-#pruning random forest 
-
-#https://towardsdatascience.com/random-forest-in-r-f66adf80ec9
-```
-
-
-```{r}
-top<- top_n(features, 10, features$NodPurity)
-#toplist<- as.list(top$Feature) #list variable did not work in gam
-one<- as.character(top[1,1])
 #one<- as.character(top[1,1])
 top_f<-as.vector(top$Feature)
 
@@ -134,7 +115,6 @@ select(one_of(c(top_f)))
 
 new$y<-df$y
 
-#gam_mod<-gam(y ~ s(), data=df)
 
 ```
 
@@ -153,6 +133,7 @@ futureVal <-predict(gam_mod, n.ahead = 2)
 
 #https://towardsdatascience.com/random-forest-in-r-f66adf80ec9
 ```
+
 
 ##GAM Viz
 ```{r}
@@ -176,4 +157,7 @@ plot_mod_gam2_response = ggplot(aes(x=Income,y=fit), data=predicts) +
   theme_trueMinimal()
 
 
+
 ```
+
+
