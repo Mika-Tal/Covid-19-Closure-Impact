@@ -36,9 +36,9 @@ sidebar <- dashboardSidebar(
     #Menu Items--------------------------
     menuItem("Overview & Data Ingestion", tabName = "overview") ,
     menuItem("Data Merging", tabName = "merging"),
-    menuItem("Missingness Check", tabName = "missing"),
-    menuItem("Feature Selection", tabName = "features")
-    # menuItem("Model Building ", tabName = "model")
+    menuItem("Data Pre-Processing", tabName = "missing"),
+    menuItem("Feature Selection", tabName = "features"),
+    menuItem("Model Building ", tabName = "model")
   )
 )
 
@@ -83,8 +83,8 @@ body <- dashboardBody(
             
             #outcome choice (cases or deaths)
             selectInput("outcome_variable", "Choose An Outcome Variable To Forecast:",
-                        c("New Cases per 100,000 People" = "confirmed_7dav_incidence_prop",
-                          "Deaths per 100,000 People" = "deaths_7dav_incidence_prop")),
+                        c("7 Day Average for New Cases per 100,000 People" = "confirmed_7dav_incidence_prop",
+                          "7 Day Average for Deaths per 100,000 People" = "deaths_7dav_incidence_prop")),
             
             
             
@@ -190,8 +190,7 @@ body <- dashboardBody(
                              dataTableOutput(outputId = "contents")),
             
             
-            #data table ------
-            #div(dataTableOutput(outputId = "overall_data")) #style = "font-size: 75%; width: 75%")
+            
     ),
     
     #Data Merging Page--------------------------------------------------------------------------------
@@ -205,11 +204,7 @@ body <- dashboardBody(
                          choices = c("Yes", "No"),
                          selected = c("No")),
             
-            # #if merge_decide = No, display the users inputted data with the covid data frame
-            # conditionalPanel(condition = "input.merge_decide == 'No'",
-            #                  dataTableOutput(outputId = "no_merge")),
-            # 
-            # 
+           
             #only allows user to see select control features if "merge_decide" = "Yes"
             conditionalPanel(condition = "input.merge_decide == 'Yes'",
                              radioButtons(inputId = "all_controls",
@@ -253,13 +248,37 @@ body <- dashboardBody(
     tabItem("features",
             
             
-
+            
             #allows the user to decide how to create the training subset -----------------------------------
             radioButtons(inputId = "train_decide",
                          label = "How do you want to train your data?",
                          choices = c("Time Ordered", "Random Shuffling"),
                          selected = c("Random Shuffling")),
             
+            
+            #allows the user to decide how many features to include in their variable importance plot --------------
+            sliderInput(inputId = "num_feats",
+                        label = "How many features would you like to include?",
+                        min = 0,
+                        max = 5,
+                        value = 4),
+            
+            
+            
+            #adds visual space
+            
+            br(),
+            
+            br(),
+            
+            br(),
+            
+            #message to show label what is being displayed
+            htmlOutput(outputId = "ft_sel"),
+            
+            
+            #shows the variable importance plot
+            plotOutput(outputId = "varImp"),
             
             
             
@@ -324,21 +343,23 @@ server <- function(input, output) {
       
       #conduct necessary data transformations
       select("geo_value", "time_value","value") %>%
-      rename(State = geo_value, 
-             Day = time_value , 
-             outcome_variable = value) %>%
-    
-
+      rename( State = geo_value , outcome_variable = value) %>%
+      
       mutate(
-        Year = strftime(Day , format = "%Y"),
-        Week = strftime(Day , format = "%V"),
-        State = toupper(State)
-      )  %>%
-      group_by(State, Year, Week, Day) %>%
-
-      summarize(
-
-        `Outcome Variable` = mean(outcome_variable)
+        Year = strftime(time_value , format = "%Y"),
+        Week = strftime(time_value , format = "%V"),
+        State = toupper(State),
+        Day = ymd(time_value) #ADDED
+      ) %>% 
+      group_by(State, Year, Week) %>% 
+      
+      
+      summarise(
+         
+        week_first_date = min(Day), #ADDED
+        `Outcome Variable` = mean(outcome_variable),
+       
+        
       )
     
     return(covid_data)
@@ -471,8 +492,7 @@ server <- function(input, output) {
 
       merged <- left_join(merged, user_data,  by=c("State","Year", "Week"), all.x = TRUE)
       
-     # write.csv(merged,file = "~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_with_original_dates.csv")
-      
+
       return(merged)
     }
     
@@ -541,15 +561,85 @@ only_sel_ctrls <- reactive({
 
   #Missingness Imputation Page Output ---------------------------------------------
   
-  
-  
-  
+ #  
+ # df<- df[, colSums(is.na(df))==0]
+ # df<- select(df, -X)
+ # df<-droplevels(df)
+ # str(df)
+ # 
+
   
   
   
   #Feature Selection Page Output ---------------------------------------------------
   
+ output$ft_sel <- renderUI({
+   
+   HTML(paste("Here's The Results of Feature Selection:", "Here's a Variable Importance Plot:", sep = "<br/><br/>"))
+   
+ })
+ 
+#Pre-Processing the Data for Feature Selection ------------------------------------------------
+#creates a separate copy of the reactive dataset to deal with feature selection
+merged_dataset_feat_sel <- reactive({
+      merged_dataset()[, colSums(is.na(merged_dataset()))==0]
   
+})
+
+
+ # output$varImp  <- renderPlot({
+ #   
+ #  # merged_dataset_feat_sel() <- select(merged_dataset_feat_sel(), -X)
+ #   
+ #   #drops the unused levels in the feature variables in the dataset
+ #   merged_dataset_feat_sel() <- droplevels(merged_dataset_feat_sel())
+ #   
+ #   # str(df)
+ #   # 
+ #   # 
+ #   
+ #   #renaming the outcome variable and the "other" race category for consistency 
+ #   names(merged_dataset_feat_sel())[names(merged_dataset_feat_sel()) == "Outcome.Variable"] <- "y" #creating consitency 
+ #   names(merged_dataset_feat_sel())[names(merged_dataset_feat_sel()) == "Other"] <- "Other_Race"  #"Other is not meaningful in output
+ #   # 
+ #   
+ #   #reorder the dataframe so that the outcome column is the first column
+ #   
+ #   col_idx <- grep("y", names(merged_dataset_feat_sel()))
+ #   merged_dataset_feat_sel() <- merged_dataset_feat_sel()[, c(col_idx, (1:ncol(merged_dataset_feat_sel()))[-col_idx])]
+ #   
+ #   #head(df)
+ #   # 
+ #   # 
+ #   end <-ncol(merged_dataset_feat_sel())
+ #   x <- merged_dataset_feat_sel()[,2:end]
+ #   y <- merged_dataset_feat_sel()[,1]
+ #   # 
+ #   # 
+ #   
+ #   set.seed(10)
+ #   bestmtry <- tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500)
+ #   #print(bestmtry)
+ #   bestmtry_var<- bestmtry[1,1]
+ #   
+ #   
+ #   rf <- randomForest(y ~ ., mtry= bestmtry_var, 
+ #                      data= merged_dataset_feat_sel)
+ #   
+ #   
+ #   varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
+ #              type=NULL, class=NULL, scale=TRUE, 
+ #              main=deparse(substitute(rf))) 
+ #   
+ # })
+ 
+
+ # 
+ # 
+ # 
+ # 
+ # 
+ # 
   #choices = c("Time Ordered", "Random Shuffling"),
   #for time ordered, would need to use top_n command 
   # 
