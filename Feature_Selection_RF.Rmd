@@ -40,11 +40,9 @@ df <-df[, -which(names(df) %in% drops)]
 col_idx <- grep("^y$", names(df))
 df <- df[, c(col_idx, (1:ncol(df))[-col_idx])]
 
-
-
 ```
-##Split
 
+##Split
 ```{r}
 
 end<-ncol(df)
@@ -95,6 +93,9 @@ plot(rf_gridsearch)
 
 
 ```{r}
+#did not end up using train & test as not testing accuracy of feature selection for the time being
+
+#change to 'outcome'
 
 rf <- randomForest(y ~ ., mtry= bestmtry_var, 
   data=df
@@ -110,6 +111,7 @@ features <-as.data.frame(setNames(cbind(rownames(features), features, row.names=
 
 top<- top_n(features, 10, features$NodPurity)
 #toplist<- as.list(top$Feature) #list variable did not work in gam
+
 #one<- as.character(top[1,1])
 top_f<-as.vector(top$Feature)
 
@@ -184,7 +186,13 @@ head(features1)
 
 glm_feats<-feat_v2(features1, 3:13) #do not include y or "id" in poly calcs
 
+one<- as.character(top[1,1])
+
+
+
+
 ```
+
 
 ###CV Glmnet 
 
@@ -317,5 +325,3 @@ plot_mod_gam2_response = ggplot(aes(x=Income,y=fit), data=predicts) +
 
 
 ```
-
-
