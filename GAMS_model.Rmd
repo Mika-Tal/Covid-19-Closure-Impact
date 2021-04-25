@@ -47,4 +47,36 @@ gam_mod<-gam(new_cases~ . , data=df)
 plot(gam_mod, residuals = TRUE, pch = 1)
 ```
 
+##GAM
+```{r}
+#Week and state and year
 
+#max out at 6 predictors
+
+
+
+#gam_mod<-gam(y ~ new[,1]+ new[,2]+ new[,7]+ new[,8]) + new[,9])
+gam(y ~ new[,1]+new[,2])
+
+## grid search hold out... cv.glment auto does validation process 
+
+gam_mod<-gam(y ~ s(new[,1])+ s(new[,2])+ s(new[,7])+ s(new[,8]) + s(new[,9])+s(new[,10]), data=new, knots = 2)
+
+summary(gam_mod)
+vis.gam(gam_mod)
+
+
+#https://m-clark.github.io/generalized-additive-models/application.html#multiple-predictors
+#pruning random forest 
+
+#https://towardsdatascience.com/random-forest-in-r-f66adf80ec9
+```
+#
+
+
+##Glmnet
+https://cran.r-project.org/web/packages/plsmselect/vignettes/plsmselect.html
+```{r}
+cv.glm
+
+```

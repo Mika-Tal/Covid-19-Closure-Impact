@@ -15,16 +15,15 @@ loadlibs = function(libs) {
 }
 libs = c("tidyverse","data.table","stargazer", "knitr", "shiny",
          "tidymodels", "lubridate", "rpart.plot", "caret", "e1071",
-         "readxl", "fuzzyjoin", "mgcv", "randomForest")
+         "readxl", "fuzzyjoin", "mgcv", "randomForest", "glmnet")
 loadlibs(libs)
 ```
 
 ```{r}
 setwd("~/GitHub/Covid-19-Closure-Impact/Data")
-#df<-read.csv('Covid_Pred.csv')
+
 df<- read.csv('shiny_merged_dataset_example.csv')
-#df$submission_date<-as.Date(df$submission_date, format="%m/%d/%Y") 
-#df$submission_date<- as.Date(as.character(df$submission_date), format="%m/%d/%Y")
+
 #Dropping the N/A columns as accounted for with the one hot encoding columns (and pervents RF)
 df<- df[, colSums(is.na(df))==0]
 
@@ -33,12 +32,16 @@ df<-droplevels(df)
 str(df)
 
 names(df)[names(df) == "Outcome.Variable"] <- "y" #creating consitency 
-names(df)[names(df) == "Other"] <- "Other_Race"  #"Other is not meaningful in output
-
+#names(df)[names(df) == "Other"] <- "Other_Race"  #"Other is not meaningful in output
+original_df<-df
+drops<-c( "Year", "week_first_date") #droping 
+df <-df[, -which(names(df) %in% drops)]
 ##Moving Ouctome Variable to front of dataset for ease of splitting
-col_idx <- grep("y", names(df))
+col_idx <- grep("^y$", names(df))
 df <- df[, c(col_idx, (1:ncol(df))[-col_idx])]
-head(df)
+
+
+
 ```
 ##Split
 
@@ -48,7 +51,7 @@ end<-ncol(df)
 x <- df[,2:end]
 y <- df[,1]
 
-
+#Removing Y from the tuning paratmers 
 
 ```
 
@@ -61,7 +64,7 @@ set.seed(10)
 bestmtry <- tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500)
 print(bestmtry)
 
-bestmtry_var<- bestmtry[1,1].0
+bestmtry_var<- bestmtry[1,1]
 
 ```
 
@@ -101,7 +104,7 @@ varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
            type=NULL, class=NULL, scale=TRUE, 
            main=deparse(substitute(rf))) 
 
-
+### GAMS
 features <- as.data.frame(rf$importance)
 features <-as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity"))) 
 
@@ -116,27 +119,182 @@ select(one_of(c(top_f)))
 new$y<-df$y
 
 
+#allow 
+#glment select levels of sparcity....  
+
 ```
 
-##GAM
+
+###Geocoding 
+
+
+#Data from: https://public.opendatasoft.com/explore/dataset/us-zip-code-latitude-and-longitude/export/ 
+Process needed to create 2D for 'state' to be incorporated into GLM with poly option 
+
+
+
 ```{r}
-#Week and state and year
 
-gam_mod<-gam(y ~ s(new[,1])+ s(new[,5])+ s(new[,6])+ s(new[,7]) + s(new[,8])+s(new[,4]), data=new)
+setwd("~/GitHub/Covid-19-Closure-Impact/Data")
 
-summary(gam_mod)
-vis.gam(gam_mod)
+geo<- read.csv('us-zip-code-latitude-and-longitude.csv', header= FALSE, stringsAsFactors = FALSE)
 
-futureVal <-predict(gam_mod, n.ahead = 2)
-#https://m-clark.github.io/generalized-additive-models/application.html#multiple-predictors
-#pruning random forest 
+geo<- as.data.frame(geo)
 
-#https://towardsdatascience.com/random-forest-in-r-f66adf80ec9
+geo<-geo%>% separate(V1, into=c("Zip", "City", "State", "Latitude","Longitude","Timezone","Daylight_savings", "geopoint"), sep=";" )
+
+geo<- geo[-1,]
+
+geo$Latitude<-as.numeric(geo$Latitude)
+geo$Longitude<-as.numeric(geo$Longitude)
+
+state_latLong <- geo%>%
+  group_by(State)%>%
+  summarise(Latitude = mean(Latitude, na.rm = TRUE),
+            Longitude = mean(Longitude, na.rm = TRUE))
+
+
 ```
 
+#Joining Long/Lat data and selected features
+```{r}
+# this step should be moved to data cleaning, ask if their data is by state or county, county can be a direct match to the original dataset 
+features<- left_join(new, state_latLong, by='State')
+id<-rownames(features)
+features<-cbind(id=id, features)
+
+
+```
+
+```{r}
+features1<-features[, -which(names(features) %in% c("State"))]
+
+##need to undo this at the end
+
+col_idx <- grep("^y$", names(features1))
+features1 <- features1[, c(col_idx, (1:ncol(features1))[-col_idx])]
+head(features1)
+
+ feat_v2 <- function(df, column_numbers) {
+
+  df %>% 
+    mutate_at(vars(column_numbers), funs(sqr = (.)^2))%>%
+   mutate_at(vars(column_numbers), funs(cube =(.)^3))
+}
+
+glm_feats<-feat_v2(features1, 3:13) #do not include y or "id" in poly calcs
+
+```
+
+###CV Glmnet 
+
+
+```{r}
+##Train/Test split 
+n<-glm_feats%>% count() 
+n<-as.numeric(n/2)
+data2= features1[sample(1:nrow(glm_feats)),]  # permute rows
+
+datatrain = data2[(1:n),]
+datatest = data2[-(1:n),]
+```
+
+```{r}
+
+train_glm<- cv.glmnet(
+  x = datatrain %>% select(-y, -id) %>% as.matrix(),
+  y = datatrain$y)
+
+i <- which(train_glm$lambda == train_glm$lambda.min)
+mse.min <- train_glm$cvm[i]
+
+
+glm_preds <-predict(train_glm, newx = datatest %>% select(-y, -id)%>% as.matrix(), newy= datatest$y)
+
+combo<- as.data.frame(cbind(glm_preds, datatest$y))
+combo<-combo%>%
+  rename(Preds='1', 
+         Original = V2)
+
+
+```
+
+```{r}
+
+plot(glm_preds)
+plot(glm_preds,xvar="lambda",label=TRUE)
+
+```
+```{r}
+
+
+
+plot(combo)
+
+combo$Error_abs <-100*abs(combo$Original - combo$Preds)/combo$Original
+
+combo$MSE<-(combo$Original - combo$Preds)^2 
+
+mean(combo$MSE)
+mean(combo$Error_abs)
+
+ggplot(combo, aes(x=Error_abs)) + geom_boxplot()
+ggplot(combo, aes(x=MSE)) + geom_boxplot()
+
+ob_v_pred_test_plot = ggplot(combo, aes(x = Original, y = Preds)) +
+  geom_point() +
+  geom_abline()
+
+
+ob_v_pred_test_plot #way over estimating 
+```
+##Mika's code for 2 week
+
+```{r}
+
+
+original_df = original_df %>% 
+  mutate_at(c('week_first_date'), ~ as.Date(., "%Y-%m-%d")) %>% 
+  mutate(two_week_forecast_date = week_first_date + 14) %>% 
+  mutate_if(is.character, as.factor) 
+ # select(-1) removed this part as it deletes state 
+
+# Get latest date 
+latest_date = max(original_df$week_first_date)
+#Two week outcome 
+
+#
+twoWeek_df = original_df %>% 
+  select(week_first_date, State, y) %>% 
+  rename(two_week_outcome = y,
+         two_week_forecast_date = week_first_date) 
+
+
+id<-rownames(twoWeek_df) #could also join on lat/long 
+toWeek<-cbind(id=id, twoWeek_df)
+
+
+#Merge with original to create a working df
+working_df = original_df %>% 
+  left_join(twoWeek_df,
+            by = c("State" = "State",
+                   "two_week_forecast_date" = "two_week_forecast_date")) %>% 
+  mutate(year = as.factor(year(two_week_forecast_date)),
+         week = as.factor(week(two_week_forecast_date)))
+
+```
+
+```{r}
+
+
+# https://gist.github.com/gunthergl/bc1202b93b672e384c77da9b3769b91d was not able to implement this graphics
+
+```
 
 ##GAM Viz
 ```{r}
+futureVal <-predict(gam_mod, n.ahead = 2) 
+
 
 pred_week <- df$Week
 
