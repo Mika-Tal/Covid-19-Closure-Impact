@@ -240,7 +240,40 @@ body <- dashboardBody(
     
     
     #Missingness Imputation page-----------------------------------------------
-    tabItem("missing"
+    tabItem("missing",
+            
+            #allows the user to decide how to deal with missingness
+            radioButtons(inputId = "handle_missingness",
+                         label = "Do you want handle missing values?",
+                         choices = c("Impute missing values", "Drop rows with missing values" , "Delete features with missing values"),
+                         selected = c("Impute missing values")),
+            
+            #adds visual space
+            br(),
+            
+            br(),
+            
+            #displays words to go before displaying the dataTable output
+          
+            htmlOutput(outputId = "no_miss_mess"),
+            
+            
+            #adds visual space
+            
+            br(),
+            
+            br(),
+            
+
+            
+            #displays the % of missingness in the data
+            dataTableOutput(outputId = "missing_stats"),
+            
+            #gives the user the option to inspect their dataset after dealing with missingness
+            dataTableOutput(outputId = "data_aft_missing")
+            
+            
+            
             
     ),
     
@@ -559,15 +592,70 @@ only_sel_ctrls <- reactive({
  })
  
 
-  #Missingness Imputation Page Output ---------------------------------------------
+  #Data Pre-Processing/ Missing Page Output ---------------------------------------------
   
- #  
- # df<- df[, colSums(is.na(df))==0]
- # df<- select(df, -X)
- # df<-droplevels(df)
- # str(df)
- # 
+ 
+ 
+ 
+ check_missingness <- function(merged_df ){
+   missing_percentages_df = merged_df %>% transmute_all(is.na) %>% 
+     colSums() %>% tibble(name=names(.), percent_missing=. * (1/nrow(merged_df)) * 100) %>% arrange(desc(percent_missing)) %>% as.data.frame()
+   return(missing_percentages_df)
+ }
+ 
+ 
+ #This function takes two arguments, first is the merged dataset (dataframe) and second is the user
+ # choice on wether to drop columns with missing data or drop rows or just impute missing values
+ handle_missingness <- function(merged_df , choice){
+   
+   if (choice == "Impute missing values"){
+     imputer_recipe = 
+       merged_df %>%
+       recipe(formula = "~ . - outcome_variable") %>%
+       step_knnimpute(all_predictors(),neighbors = 1)
+     
+     merged_imputed_df = prep(imputer_recipe) %>%
+       bake(new_data = merged_df)
+   }
+   
+   if (choice == "Drop rows with missing values"){
+     merged_imputed_df <- merged_df[rowSums(is.na(merged_df)) <= 0,]
+     
+   }
+   if (choice == "Delete features with missing values"){
+     merged_imputed_df <- merged_df %>%  select_if(~ !any(is.na(.)))
+     
+   }
+   
+   return(merged_imputed_df)
+   
+   
+ }
+ 
+ 
+ output$no_miss_mess <- renderUI({
+   
+   HTML(paste("Here's The Amount of Missingness in the Data:", sep = "<br/><br/>"))
+   
+ })
+ 
+ 
+ 
+ 
+ #displays the new dataset after addressing potential missingnes in the dataset
+ output$missing_stats <- renderDataTable({
+   
+   merged_df <- merged_dataset()
+   miss_stats_df <- check_missingness(merged_df)
+   
+   DT::datatable(data = miss_stats_df,
+                 rownames = FALSE,
+                 options = list(scrollX = T))
+   
+ })
+ 
 
+ # "data_aft_missing"
   
   
   
