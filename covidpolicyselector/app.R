@@ -412,6 +412,7 @@ server <- function(input, output) {
     
   })
 
+  
     
     
     #placeholder for displaying whatever datatable results from querying the API
@@ -532,6 +533,8 @@ server <- function(input, output) {
  
   }
   
+  
+ 
 #creates a reactive dataframe including only the control features that the user selects
 only_sel_ctrls <- reactive({
   state_controls %>% 
@@ -594,16 +597,24 @@ only_sel_ctrls <- reactive({
 
   #Data Pre-Processing/ Missing Page Output ---------------------------------------------
   
- 
- 
- 
  check_missingness <- function(merged_df ){
-   missing_percentages_df = merged_df %>% transmute_all(is.na) %>% 
-     colSums() %>% tibble(name=names(.), percent_missing=. * (1/nrow(merged_df)) * 100) %>% arrange(desc(percent_missing)) %>% as.data.frame()
+   missing_percentages_df = colSums(is.na(merged_df)) %>% 
+     tibble(name=names(.), percent_missing=. * (1/nrow(merged_df)) * 100) %>% 
+     select(name, percent_missing) %>% 
+     
+     #formats the percent missing nicely
+     mutate(percent_missing = round(percent_missing, digits = 2)) %>% 
+     arrange(desc(percent_missing)) %>%
+     as.data.frame()
+   
+   
    return(missing_percentages_df)
  }
  
  
+ miss_result <- check_missingness(merged_data_ex)
+ 
+
  #This function takes two arguments, first is the merged dataset (dataframe) and second is the user
  # choice on wether to drop columns with missing data or drop rows or just impute missing values
  handle_missingness <- function(merged_df , choice){
@@ -640,6 +651,44 @@ only_sel_ctrls <- reactive({
  })
  
  
+ 
+ #start troubleshooting -----------------
+ 
+ covid_data_ex <- query_API_fun("2020-03-01", "2021-04-23", "confirmed_7dav_incidence_prop")
+ 
+ 
+ user_input_example <- user_input_example %>%    
+   mutate(
+   Date = as.Date(Date, format = "%m/%d/%Y"),
+   Year = strftime(Date , format = "%Y"),
+   Week = strftime(Date , format = "%V"),
+   State = toupper(State)
+ ) %>% 
+   
+   group_by(State, Year, Week) %>% 
+   summarise_each(funs(mean)) %>% subset(select = -c(Date)) %>%  mutate_if(is.numeric, ~round(., 0))
+ 
+ 
+ merged_data_ex <- merge_dataset_fun(covid_data_ex,user_input_example, state_controls)
+ 
+ # shiny_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
+ #  
+ # # missing_percentages_df = colSums(is.na(merged_data_ex)) %>% 
+ # #                          tibble(name=names(.), percent_missing=. * (1/nrow(merged_data_ex)) * 100) %>% 
+ # #                          select(name, percent_missing) %>% 
+ # #                          #formats the percent missing nicely
+ # #                          mutate(percent_missing = round(percent_missing, digits = 2)) %>% 
+ # #                          arrange(desc(percent_missing)) %>%
+ # #                          as.data.frame()
+ #                  
+ #  #trouble <- merged_data_ex %>% 
+ #              # filter_all(any_vars(is.na(.)))
+ #     
+ 
+ 
+ 
+ 
+ #troubleshooting ends -------------------------------------
  
  
  #displays the new dataset after addressing potential missingnes in the dataset
