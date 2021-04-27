@@ -672,24 +672,24 @@ only_sel_ctrls <- reactive({
  
  
  #start troubleshooting -----------------
-
- covid_data_ex <- query_API_fun("2020-03-01", "2021-04-23", "confirmed_7dav_incidence_prop")
-
-
- user_input_example <- user_input_example %>%
-   mutate(
-   Date = as.Date(Date, format = "%m/%d/%Y"),
-   Year = strftime(Date , format = "%Y"),
-   Week = strftime(Date , format = "%V"),
-   State = toupper(State)
- ) %>%
-
-   group_by(State, Year, Week) %>%
-   summarise_each(funs(mean)) %>% subset(select = -c(Date)) %>%  mutate_if(is.numeric, ~round(., 0))
-
-
- merged_data_ex <- merge_dataset_fun(covid_data_ex,user_input_example, state_controls)
- 
+# 
+#  covid_data_ex <- query_API_fun("2020-03-01", "2021-04-23", "confirmed_7dav_incidence_prop")
+# 
+# 
+#  user_input_example <- user_input_example %>%
+#    mutate(
+#    Date = as.Date(Date, format = "%m/%d/%Y"),
+#    Year = strftime(Date , format = "%Y"),
+#    Week = strftime(Date , format = "%V"),
+#    State = toupper(State)
+#  ) %>%
+# 
+#    group_by(State, Year, Week) %>%
+#    summarise_each(funs(mean)) %>% subset(select = -c(Date)) %>%  mutate_if(is.numeric, ~round(., 0))
+# 
+# 
+#  merged_data_ex <- merge_dataset_fun(covid_data_ex,user_input_example, state_controls)
+#  
  # shiny_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
  #  
  # # missing_percentages_df = colSums(is.na(merged_data_ex)) %>% 
@@ -740,8 +740,10 @@ only_sel_ctrls <- reactive({
   
   
   
-  #Feature Selection Page Output ---------------------------------------------------
-  
+#Feature Selection Page Output ---------------------------------------------------
+ #the new dataset after missingness is handled
+ 
+
  output$ft_sel <- renderUI({
    
    HTML(paste("Here's The Results of Feature Selection:", "Here's a Variable Importance Plot:", sep = "<br/><br/>"))
@@ -964,10 +966,18 @@ merged_dataset_feat_sel <- reactive({
   
   
   
+  #Model Building Page ---------------------------------------------------------------------
+ 
+ #new dataset after missingness has been handled
+ data_after_missing <- reactive({
+   handle_missingness(merged_data())
+ })
+ 
   
-  
-  
-  
+
+ 
+ 
+ 
 }
 
 # Run the application 
