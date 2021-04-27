@@ -241,18 +241,7 @@ body <- dashboardBody(
     
     #Missingness Imputation page-----------------------------------------------
     tabItem("missing",
-            
-            #allows the user to decide how to deal with missingness
-            radioButtons(inputId = "handle_missingness",
-                         label = "Do you want handle missing values?",
-                         choices = c("Impute missing values", "Drop rows with missing values" , "Delete features with missing values"),
-                         selected = c("Impute missing values")),
-            
-            #adds visual space
-            br(),
-            
-            br(),
-            
+        
             #displays words to go before displaying the dataTable output
           
             htmlOutput(outputId = "no_miss_mess"),
@@ -264,10 +253,28 @@ body <- dashboardBody(
             
             br(),
             
-
-            
             #displays the % of missingness in the data
             dataTableOutput(outputId = "missing_stats"),
+            
+            
+            #adds visual space 
+            
+            br(),
+            
+            br(),
+            
+            
+            #allows the user to decide how to deal with missingness
+            radioButtons(inputId = "handle_missingness",
+                         label = "Do you want handle missing values?",
+                         choices = c("Impute missing values", "Drop rows with missing values" , "Delete features with missing values"),
+                         selected = c("Drop rows with missing values")),
+            
+            #adds visual space
+            br(),
+            
+            br(),
+            
             
             #gives the user the option to inspect their dataset after dealing with missingness
             dataTableOutput(outputId = "data_aft_missing")
@@ -390,7 +397,7 @@ server <- function(input, output) {
       summarise(
          
         week_first_date = min(Day), #ADDED
-        `Outcome Variable` = mean(outcome_variable),
+        outcome_variable = mean(outcome_variable),
        
         
       )
@@ -595,7 +602,7 @@ only_sel_ctrls <- reactive({
  })
  
 
-  #Data Pre-Processing/ Missing Page Output ---------------------------------------------
+#Data Pre-Processing/ Missing Page Output ---------------------------------------------
   
  check_missingness <- function(merged_df ){
    missing_percentages_df = colSums(is.na(merged_df)) %>% 
@@ -612,21 +619,26 @@ only_sel_ctrls <- reactive({
  }
  
  
- miss_result <- check_missingness(merged_data_ex)
- 
 
  #This function takes two arguments, first is the merged dataset (dataframe) and second is the user
  # choice on wether to drop columns with missing data or drop rows or just impute missing values
  handle_missingness <- function(merged_df , choice){
    
+   #make necessary data type changes
+   miss_df <- merged_df %>%
+     ungroup() %>%
+     mutate_if(is.character, as.factor) %>% 
+     mutate_if(is.Date, as.factor)
+
+   
    if (choice == "Impute missing values"){
      imputer_recipe = 
-       merged_df %>%
+       miss_df %>%
        recipe(formula = "~ . - outcome_variable") %>%
        step_knnimpute(all_predictors(),neighbors = 1)
      
      merged_imputed_df = prep(imputer_recipe) %>%
-       bake(new_data = merged_df)
+       bake(new_data = miss_df)
    }
    
    if (choice == "Drop rows with missing values"){
@@ -643,7 +655,14 @@ only_sel_ctrls <- reactive({
    
  }
  
- 
+#  trouble_miss = handle_missingness(trouble, "Impute missing values")
+#  
+#  
+# trouble =  merged_data_ex %>%
+#   ungroup() %>%
+#   mutate_if(is.character, as.factor) %>% 
+#   mutate_if(is.Date, as.factor)
+
  output$no_miss_mess <- renderUI({
    
    HTML(paste("Here's The Amount of Missingness in the Data:", sep = "<br/><br/>"))
@@ -653,22 +672,22 @@ only_sel_ctrls <- reactive({
  
  
  #start troubleshooting -----------------
- 
+
  covid_data_ex <- query_API_fun("2020-03-01", "2021-04-23", "confirmed_7dav_incidence_prop")
- 
- 
- user_input_example <- user_input_example %>%    
+
+
+ user_input_example <- user_input_example %>%
    mutate(
    Date = as.Date(Date, format = "%m/%d/%Y"),
    Year = strftime(Date , format = "%Y"),
    Week = strftime(Date , format = "%V"),
    State = toupper(State)
- ) %>% 
-   
-   group_by(State, Year, Week) %>% 
+ ) %>%
+
+   group_by(State, Year, Week) %>%
    summarise_each(funs(mean)) %>% subset(select = -c(Date)) %>%  mutate_if(is.numeric, ~round(., 0))
- 
- 
+
+
  merged_data_ex <- merge_dataset_fun(covid_data_ex,user_input_example, state_controls)
  
  # shiny_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
@@ -684,6 +703,8 @@ only_sel_ctrls <- reactive({
  #  #trouble <- merged_data_ex %>% 
  #              # filter_all(any_vars(is.na(.)))
  #     
+ 
+ #miss_result <- check_missingness(merged_data_ex)
  
  
  
@@ -704,7 +725,18 @@ only_sel_ctrls <- reactive({
  })
  
 
- # "data_aft_missing"
+ #displays the dataset after missingness has been dealt with, according to the "handle_missingness" function
+ 
+ output$data_aft_missing <- renderDataTable({
+   
+   merged_df <- merged_dataset()
+   df_aft_miss <- handle_missingness(merged_df, input$handle_missingness)
+   DT::datatable(data = df_aft_miss,
+                 rownames = FALSE,
+                 options = list(scrollX = T))
+   
+   
+ })
   
   
   
