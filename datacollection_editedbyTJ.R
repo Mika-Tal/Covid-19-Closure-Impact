@@ -14,7 +14,7 @@ loadlibs(libs)
 
 
 #function to create the merged dataset
-merge_dataset_fun <- function(start_date , end_date, outcome_variable, user_df ){
+merge_dataset_fun <- function( start_date , end_date, outcome_variable, user_df ){
   
   controls_df <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/state_controls.csv")
   

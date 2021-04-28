@@ -246,47 +246,7 @@ body <- dashboardBody(
     
     
     #Missingness Imputation page-----------------------------------------------
-    tabItem("missing",
-        
-            #displays words to go before displaying the dataTable output
-          
-            htmlOutput(outputId = "no_miss_mess"),
-            
-            
-            #adds visual space
-            
-            br(),
-            
-            br(),
-            
-            #displays the % of missingness in the data
-            dataTableOutput(outputId = "missing_stats"),
-            
-            
-            #adds visual space 
-            
-            br(),
-            
-            br(),
-            
-            
-            #allows the user to decide how to deal with missingness
-            radioButtons(inputId = "handle_missingness",
-                         label = "Do you want handle missing values?",
-                         choices = c("Impute missing values", "Drop rows with missing values" , "Delete features with missing values"),
-                         selected = c("Drop rows with missing values")),
-            
-            #adds visual space
-            br(),
-            
-            br(),
-            
-            
-            #gives the user the option to inspect their dataset after dealing with missingness
-            dataTableOutput(outputId = "data_aft_missing")
-            
-            
-            
+    tabItem("missing"
             
     ),
     
@@ -422,12 +382,27 @@ server <- function(input, output) {
         Year = strftime(time_value , format = "%Y"),
         Week = strftime(time_value , format = "%V"),
         State = toupper(State),
+<<<<<<< HEAD
         Day = strftime(time_value , format = "%A"),
         Date = ymd(time_value)
       ) %>%
       subset(Day == "Monday")
     
     covid_data <- subset(covid_data, select=-c(Day,time_value))
+=======
+        Day = ymd(time_value) #ADDED
+      ) %>% 
+      group_by(State, Year, Week) %>% 
+      
+      
+      summarise(
+         
+        week_first_date = min(Day), #ADDED
+        `Outcome Variable` = mean(outcome_variable),
+       
+        
+      )
+>>>>>>> fb84189e4d3775cb31d65c1144349801f2b8b303
     
       
     return(covid_data)
@@ -447,7 +422,6 @@ server <- function(input, output) {
     
   })
 
-  
     
     
     #placeholder for displaying whatever datatable results from querying the API
@@ -568,8 +542,6 @@ server <- function(input, output) {
  
   }
   
-  
- 
 #creates a reactive dataframe including only the control features that the user selects
 only_sel_ctrls <- reactive({
   state_controls %>% 
@@ -630,8 +602,9 @@ only_sel_ctrls <- reactive({
  })
  
 
-#Data Pre-Processing/ Missing Page Output ---------------------------------------------
+  #Missingness Imputation Page Output ---------------------------------------------
   
+<<<<<<< HEAD
  check_missingness <- function(merged_df ){
    missing_percentages_df = colSums(is.na(merged_df)) %>% 
      tibble(name=names(.), percent_missing=. * (1/nrow(merged_df)) * 100) %>% 
@@ -721,13 +694,20 @@ only_sel_ctrls <- reactive({
    
    
  })
-  
-  
-  
-#Feature Selection Page Output ---------------------------------------------------
- #the new dataset after missingness is handled
- 
+=======
+ #  
+ # df<- df[, colSums(is.na(df))==0]
+ # df<- select(df, -X)
+ # df<-droplevels(df)
+ # str(df)
+ # 
 
+>>>>>>> fb84189e4d3775cb31d65c1144349801f2b8b303
+  
+  
+  
+  #Feature Selection Page Output ---------------------------------------------------
+  
  output$ft_sel <- renderUI({
    
    HTML(paste("Here's The Results of Feature Selection:", "Here's a Variable Importance Plot:", sep = "<br/><br/>"))
@@ -950,6 +930,7 @@ merged_dataset_feat_sel <- reactive({
   
   
   
+<<<<<<< HEAD
 #Model Building Page ---------------------------------------------------------------------
  
  output$xgb_pls_wait <- renderUI({
@@ -1283,6 +1264,12 @@ xgb_model_output <- eventReactive(input$runxgb, {
 
 #troubleshooting ends -------------------------------------
  
+=======
+  
+  
+  
+  
+>>>>>>> fb84189e4d3775cb31d65c1144349801f2b8b303
 }
 
 # Run the application 

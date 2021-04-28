@@ -20,7 +20,7 @@ loadlibs(libs)
 
 ```{r}
 #Load dataset
-working_df = read.csv("Data/shiny_merged_dataset_example.csv") %>% 
+working_df = read.csv("working_14days.csv") %>% 
   filter(submission_date >= as.Date("2020-03-01") & submission_date < as.Date("2020-05-01"))
 
 #Covid deaths outcome variable df
