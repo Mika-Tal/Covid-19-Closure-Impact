@@ -22,6 +22,8 @@ loadlibs(libs)
 ```{r}
 setwd("~/GitHub/Covid-19-Closure-Impact/Data")
 
+#df<-read.csv('Covid_Pred.csv')
+
 df<- read.csv('shiny_merged_dataset_example.csv')
 
 
@@ -30,47 +32,6 @@ df<- read.csv('shiny_merged_dataset_example.csv')
 
 ```
 
-```{r}
-##Add column that has case count from2 weeks prior and use as a predictor (pretty much the opposite of Mika's code )
-
-
-original_df = df %>% 
-  mutate_at(c('week_first_date'), ~ as.Date(., "%Y-%m-%d")) %>% 
-  mutate(two_week_prior = week_first_date - 14,
-         two_week_forecast_date = week_first_date + 14) %>% 
-  mutate_if(is.character, as.factor)%>% 
-  select(-1) 
-
-# Get latest date 
-latest_date = max(original_df$week_first_date) 
-
-#Two week outcome 
-twoWeek_df = original_df %>% 
-  select(week_first_date,two_week_prior, State, Outcome.Variable) %>% 
-  rename(two_week_outcome = Outcome.Variable,
-         two_week_forecast_date = week_first_date) 
-
-id<-rownames(twoWeek_df) #could also join on lat/long 
-toWeek<-cbind(id=id, twoWeek_df)
-
-#Merge with original to create a working df
-df = original_df %>% 
-  left_join(twoWeek_df,
-            by = c("State" = "State",
-                   "two_week_forecast_date" = "two_week_forecast_date", 
-                   "two_week_prior" ="two_week_prior")) %>% 
-  mutate(year = as.factor(year(two_week_forecast_date)),
-         week = as.factor(week(two_week_forecast_date)))
-
-df<-df[, -which(names(df) %in% c('two_week_outcome'))]
-
-df$past_two_wk_y <-twoWeek_df$two_week_outcome
-#Dropping the N/A columns as accounted for with the one hot encoding columns (and pervents RF)
-#df<- df[, colSums(is.na(working_df))==0]
-#df<- select(df, -X) handled above
-df<-droplevels(df)
-
-```
 
 
 ```{r}
@@ -105,7 +66,7 @@ set.seed(10)
 bestmtry <- tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500)
 print(bestmtry)
 
-bestmtry_var<- bestmtry[1,1]
+bestmtry_var<- bestmtry[1,1].0
 
 ```
 
@@ -136,9 +97,6 @@ plot(rf_gridsearch)
 
 
 ```{r}
-#did not end up using train & test as not testing accuracy of feature selection for the time being
-
-#change to 'outcome'
 
 rf <- randomForest(y ~ ., mtry= bestmtry_var, 
   data=df
@@ -164,7 +122,7 @@ select(one_of(c(top_f)))
 new$y<-df$y
 
 
-#allow 
+
 #glment select levels of sparcity....  
 
 ```
@@ -253,6 +211,8 @@ datatest = data2[-(1:n),]
 
 ```
 
+
+##Glmnet 
 ```{r}
 
 train_glm<- cv.glmnet(
@@ -295,6 +255,22 @@ mean(combo$Error_abs)
 ggplot(combo, aes(x=Error_abs)) + geom_boxplot()
 ggplot(combo, aes(x=MSE)) + geom_boxplot()
 
+```
+
+####GAM not used
+
+#Week and state and year
+
+gam_mod<-gam(y ~ s(new[,1])+ s(new[,5])+ s(new[,6])+ s(new[,7]) + s(new[,8])+s(new[,4]), data=new)
+
+summary(gam_mod)
+vis.gam(gam_mod)
+
+futureVal <-predict(gam_mod, n.ahead = 2)
+#https://m-clark.github.io/generalized-additive-models/application.html#multiple-predictors
+#pruning random forest 
+
+
 ob_v_pred_test_plot = ggplot(combo, aes(x = Preds, y = Original)) +
   geom_point() +
   geom_abline()
@@ -302,57 +278,15 @@ ob_v_pred_test_plot = ggplot(combo, aes(x = Preds, y = Original)) +
 
 ob_v_pred_test_plot #way over estimating 
 ```
-##Mika's code for 2 week
-
-```{r}
 
 
-original_df = original_df %>% 
-  mutate_at(c('week_first_date'), ~ as.Date(., "%Y-%m-%d")) %>% 
-  mutate(two_week_forecast_date = week_first_date + 14) %>% 
-  mutate_if(is.character, as.factor) 
- # select(-1) removed this part as it deletes state 
-
-# Get latest date 
-latest_date = max(original_df$week_first_date)
-#Two week outcome 
-
-#
-twoWeek_df = original_df %>% 
-  select(week_first_date, State, y) %>% 
-  rename(two_week_outcome = y,
-         two_week_forecast_date = week_first_date) 
-
-
-id<-rownames(twoWeek_df) #could also join on lat/long 
-toWeek<-cbind(id=id, twoWeek_df)
-
-
-#Merge with original to create a working df
-working_df = original_df %>% 
-  left_join(twoWeek_df,
-            by = c("State" = "State",
-                   "two_week_forecast_date" = "two_week_forecast_date")) %>% 
-  mutate(year = as.factor(year(two_week_forecast_date)),
-         week = as.factor(week(two_week_forecast_date)))
-
-
-#"two_week_outcome" = new y 
-
-#filter out the preds from
-```
-
-```{r}
 
 
 # https://gist.github.com/gunthergl/bc1202b93b672e384c77da9b3769b91d was not able to implement this graphics
 
-```
-
 ##GAM Viz
-```{r}
-futureVal <-predict(gam_mod, n.ahead = 2) 
 
+futureVal <-predict(gam_mod, n.ahead = 2) 
 
 pred_week <- df$Week
 
@@ -374,4 +308,4 @@ plot_mod_gam2_response = ggplot(aes(x=Income,y=fit), data=predicts) +
 
 
 
-```
+
