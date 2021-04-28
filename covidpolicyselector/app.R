@@ -17,6 +17,12 @@ library(tidymodels)
 library(covidcast)
 library(lubridate)
 library(randomForest)
+library(xgboost)
+library(caret)
+# add these libraries 
+libs = c("tidyverse","data.table","stargazer", "caret", "e1071", "splines",
+         "randomForest", "C50", "xgboost", "ggplot2", "cowplot", "forecast")
+
 
 #read in static datasets -- controls only and the sample user input data
 state_controls <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/state_controls.csv")
@@ -77,7 +83,7 @@ body <- dashboardBody(
             dateRangeInput(inputId = "dates_of_interest",
                            label = "Choose the Date Range of Interest for COVID-19 Data",
                            start = "2020-03-01",
-                           end = "2021-03-01",
+                           end = "2021-04-09",
                            format = "yyyy-mm-dd",
                            separator = "-"),
             
@@ -187,7 +193,7 @@ body <- dashboardBody(
                                           selected = "head"),
                              
                              #resulting data from file upload
-                             dataTableOutput(outputId = "contents")),
+                             dataTableOutput(outputId = "contents"))
             
             
             
@@ -342,7 +348,34 @@ body <- dashboardBody(
     ),
     
     #Model Building page ------------------------------------------------------------------------------
-    tabItem("model")
+    tabItem("model",
+     
+            
+            #click to run the XGBoost model
+            actionButton(inputId = "runxgb",
+                         label = "Click to Run the XGBoost Model"),
+            
+            br(),
+            
+            br(), 
+            
+            #Gives the user a message while waiting for XGBoost to run
+            htmlOutput(outputId = "xgb_pls_wait"),    
+            
+           
+            
+           
+          
+            dataTableOutput(outputId = "model_specs"),
+            
+            plotOutput(outputId = "preds_vs_observed")
+            
+    
+    
+    
+    )
+    
+    
     
   )
 )
@@ -383,25 +416,20 @@ server <- function(input, output) {
       
       #conduct necessary data transformations
       select("geo_value", "time_value","value") %>%
-      rename( State = geo_value , outcome_variable = value) %>%
+      rename( State = geo_value , covid_measure = value) %>%
       
       mutate(
         Year = strftime(time_value , format = "%Y"),
         Week = strftime(time_value , format = "%V"),
         State = toupper(State),
-        Day = ymd(time_value) #ADDED
-      ) %>% 
-      group_by(State, Year, Week) %>% 
-      
-      
-      summarise(
-         
-        week_first_date = min(Day), #ADDED
-        outcome_variable = mean(outcome_variable),
-       
-        
-      )
+        Day = strftime(time_value , format = "%A"),
+        Date = ymd(time_value)
+      ) %>%
+      subset(Day == "Monday")
     
+    covid_data <- subset(covid_data, select=-c(Day,time_value))
+    
+      
     return(covid_data)
     
   }
@@ -634,7 +662,7 @@ only_sel_ctrls <- reactive({
    if (choice == "Impute missing values"){
      imputer_recipe = 
        miss_df %>%
-       recipe(formula = "~ . - outcome_variable") %>%
+       recipe(formula = "~ . - covid_measure") %>%
        step_knnimpute(all_predictors(),neighbors = 1)
      
      merged_imputed_df = prep(imputer_recipe) %>%
@@ -655,61 +683,12 @@ only_sel_ctrls <- reactive({
    
  }
  
-#  trouble_miss = handle_missingness(trouble, "Impute missing values")
-#  
-#  
-# trouble =  merged_data_ex %>%
-#   ungroup() %>%
-#   mutate_if(is.character, as.factor) %>% 
-#   mutate_if(is.Date, as.factor)
 
  output$no_miss_mess <- renderUI({
    
    HTML(paste("Here's The Amount of Missingness in the Data:", sep = "<br/><br/>"))
    
  })
- 
- 
- 
- #start troubleshooting -----------------
-# 
-#  covid_data_ex <- query_API_fun("2020-03-01", "2021-04-23", "confirmed_7dav_incidence_prop")
-# 
-# 
-#  user_input_example <- user_input_example %>%
-#    mutate(
-#    Date = as.Date(Date, format = "%m/%d/%Y"),
-#    Year = strftime(Date , format = "%Y"),
-#    Week = strftime(Date , format = "%V"),
-#    State = toupper(State)
-#  ) %>%
-# 
-#    group_by(State, Year, Week) %>%
-#    summarise_each(funs(mean)) %>% subset(select = -c(Date)) %>%  mutate_if(is.numeric, ~round(., 0))
-# 
-# 
-#  merged_data_ex <- merge_dataset_fun(covid_data_ex,user_input_example, state_controls)
-#  
- # shiny_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
- #  
- # # missing_percentages_df = colSums(is.na(merged_data_ex)) %>% 
- # #                          tibble(name=names(.), percent_missing=. * (1/nrow(merged_data_ex)) * 100) %>% 
- # #                          select(name, percent_missing) %>% 
- # #                          #formats the percent missing nicely
- # #                          mutate(percent_missing = round(percent_missing, digits = 2)) %>% 
- # #                          arrange(desc(percent_missing)) %>%
- # #                          as.data.frame()
- #                  
- #  #trouble <- merged_data_ex %>% 
- #              # filter_all(any_vars(is.na(.)))
- #     
- 
- #miss_result <- check_missingness(merged_data_ex)
- 
- 
- 
- 
- #troubleshooting ends -------------------------------------
  
  
  #displays the new dataset after addressing potential missingnes in the dataset
@@ -727,10 +706,15 @@ only_sel_ctrls <- reactive({
 
  #displays the dataset after missingness has been dealt with, according to the "handle_missingness" function
  
+ #new dataset after missingness has been handled
+ data_after_missing <- reactive({
+   handle_missingness(merged_dataset(), input$handle_missingness)
+ })
+ 
  output$data_aft_missing <- renderDataTable({
    
    merged_df <- merged_dataset()
-   df_aft_miss <- handle_missingness(merged_df, input$handle_missingness)
+   df_aft_miss <- data_after_missing()
    DT::datatable(data = df_aft_miss,
                  rownames = FALSE,
                  options = list(scrollX = T))
@@ -966,17 +950,338 @@ merged_dataset_feat_sel <- reactive({
   
   
   
-  #Model Building Page ---------------------------------------------------------------------
+#Model Building Page ---------------------------------------------------------------------
  
- #new dataset after missingness has been handled
- data_after_missing <- reactive({
-   handle_missingness(merged_data())
+ output$xgb_pls_wait <- renderUI({
+   
+   HTML(paste("Please wait while the XGBoost Model Runs...", sep = "<br/><br/>"))
+   
  })
  
-  
 
  
  
+#creates a new variable to capture the two-week forecast
+
+ addTwoWeekForecast <- function(merged_df) {
+   
+   #ungroups the data 
+   #merged_df <- merged_df %>% ungroup()
+   
+   #create a two week forecast variable
+   original_df = merged_df %>% 
+     mutate_at(c('Date'), ~ as.Date(., "%Y-%m-%d")) %>% 
+     mutate(two_week_forecast_date = Date + 14) %>% 
+     mutate_if(is.character, as.factor) 
+   
+   #map the two week forecast variable to the outcome variable in two weeks
+   twoWeek_df = original_df %>%
+     select(Date, State, covid_measure) %>%
+     rename(two_week_outcome = covid_measure,
+            two_week_forecast_date = Date)
+
+
+   #combine the original dataframe with the new dataframe with the two week forecast
+   working_df = original_df %>%
+     left_join(twoWeek_df,
+               by = c("State" = "State",
+                      "two_week_forecast_date" = "two_week_forecast_date")) %>%
+     mutate(year = as.factor(year(two_week_forecast_date)),
+            week = as.factor(week(two_week_forecast_date)))
+
+   return(working_df)
+ }
+ 
+
+ #make a reactive data frame after the two week forecast has been added
+ forecast_data <- reactive({
+   
+   addTwoWeekForecast(data_after_missing()) 
+ 
+ })
+ 
+ 
+
+
+
+#  createTrainSet <- function(forecast_data) {
+# 
+#   latest_date = max(forecast_data$week_first_date)
+# 
+#   train = forecast_data[forecast_data$two_week_forecast_date <= (latest_date - 14), ] %>% na.omit()
+# 
+#   return(train)
+# }
+# 
+# createTestSet <- function(forecast_data) {
+#   
+#   latest_date = max(forecast_data$week_first_date)
+#   
+#   test = forecast_data[(forecast_data$two_week_forecast_date <= latest_date) &
+#                          (forecast_data$two_week_forecast_date > (latest_date - 14)), ] %>% na.omit()
+# 
+#   return(test)
+# }
+# 
+# 
+# 
+# createPredSet <- function(forecast_data) {
+#   
+#   latest_date = max(forecast_data$week_first_date)
+#   
+# 
+#   pred = forecast_data[forecast_data$two_week_forecast_date > latest_date, ]
+#   
+#   return(pred)
+#   
+# }
+#   
+# #when called, input$state to as the second argument -- add to the model selection page
+# 
+# createPredState <- function(forecast_data, state) {
+#   
+#   latest_date = max(forecast_data$week_first_date)
+#   pred_state = forecast_data[forecast_data$two_week_forecast_date > latest_date, ] %>% 
+#     filter(State == state)
+#   
+# }
+  
+
+
+
+# XGBPred = xgb.DMatrix(data.matrix(pred %>%
+#                                     select(-c(two_week_forecast_date,
+#                                               two_week_outcome))))
+# 
+# XGBPred_state = xgb.DMatrix(data.matrix(pred_state %>%
+#                                           select(-c(two_week_forecast_date,
+#                                                     two_week_outcome))))
+
+ 
+ #creates the training dataset for the XGBoost model 
+ createXGBTrainSet <- function(forecast_data) {
+   
+   latest_date = max(forecast_data$Date)
+   
+   train = forecast_data[forecast_data$two_week_forecast_date <= (latest_date - 14), ] %>% na.omit()
+   
+   return(train)
+ }
+ 
+ #creates a reactive dataframe for the training data 
+ train_data <- reactive ({
+   
+   createXGBTrainSet(forecast_data())
+   
+   
+ })
+
+ 
+
+
+trainXGBoost <- function(train_df) {
+
+#Convert the predictor variable matrices to xgb.DMatrix data types
+XGBTrain = xgb.DMatrix(data.matrix(train_df %>%
+                                     select(-c(two_week_forecast_date,
+                                               two_week_outcome))))
+#Define random grid parameters for tuning the models
+XGBtc=trainControl(
+  method='cv',
+  number=5,
+  allowParallel=TRUE,
+  verboseIter=FALSE,
+  returnData=FALSE
+)
+# create grid for tuning hyperparameters
+XGBtg <- expand.grid(nrounds = 20,
+                     max_depth = c(5, 10, 15),
+                     colsample_bytree = seq(0.5, 0.9, length.out = 5),
+                     eta = c(0.1, 0.2, 0.4),
+                     gamma=c(0, 2, 3),
+                     min_child_weight = 1,
+                     subsample = 0.75
+)
+
+
+# train model - with dates and state
+XGBModel = train(
+  XGBTrain, train_df$two_week_outcome,
+  trControl = XGBtc,
+  tuneGrid = XGBtg,
+  method = "xgbTree")
+
+
+best_model <- XGBModel$bestTune  
+
+return(best_model)
+
+}
+
+
+#captures the results of running the XGB model
+xgb_model_output <- eventReactive(input$runxgb, {
+  
+  trainXGBoost(train_data())
+}
+)
+  
+
+  
+  
+
+ #test dataframe 
+ output$model_specs <- renderDataTable({
+   
+   DT::datatable(data = xgb_model_output(),
+                 rownames = FALSE,
+                 options = list(scrollX = T))
+   
+   
+ })
+ 
+ # #display the best model specifications -- using renderTable or something..
+ #   
+ # XGBModel$bestTune  
+# 
+# createDenseMatrix <- function() {
+#   
+#   XGBTest = xgb.DMatrix(data.matrix(test %>% #change the name of the dataset
+#                                       select(-c(two_week_forecast_date,
+#                                                 two_week_outcome))))
+# }
+#   
+# 
+# 
+# predictXGBoost <- function(XGBModel, predict_df) {
+#   
+#   xgbmodel_predictions = predict(XGBModel, predict_df)
+#   
+#   return(xgbmodel_predictions)
+#   
+# 
+# }
+# 
+# 
+# 
+# 
+# calculateRSME <- function()
+#   
+#   
+
+# 
+#   
+#   
+# 
+# XGBRMSE = sqrt(mean ((test$two_week_outcome - XGBModel_test) ^ 2 ) )
+# 
+# XGBModel_pred = predict(XGBModel, XGBPred)
+# 
+# XGBModel_state = predict(XGBModel, XGBPred_state)
+# 
+# 
+# #Plot observed vs. predicted
+# obs_vs_pred = test %>% 
+#   select(two_week_outcome) %>% 
+#   rename(Observed = two_week_outcome) %>% 
+#   bind_cols(tibble(Predicted = XGBModel_test)) %>% 
+#   mutate(Observed = log(Observed),
+#          Predicted = log(Predicted))
+# 
+# 
+# #goodness of fit plot
+# obs_vs_pred_plot = ggplot(obs_vs_pred, aes(x = Observed, y = Predicted)) +
+#   geom_point() +
+#   geom_abline() +
+#   xlab("Log(Observed)") +
+#   ylab("Log(Predicted)")
+# 
+# 
+# #Plot Predictions -- for all of the states
+# 
+# output$plot_all_states <- renderPlot{(
+#   outcome_all = train %>% 
+#     select(two_week_forecast_date, two_week_outcome) %>%
+#     rename(Date = two_week_forecast_date,
+#            Outcome = two_week_outcome) %>% 
+#     mutate (Pred_vs_Obs = "Observed") %>% 
+#     rbind(tibble(Date = pred$two_week_forecast_date,
+#                  Outcome = XGBModel_pred,
+#                  Pred_vs_Obs = "Predicted"))
+#   
+#   outcome_plot_all = ggplot(outcome_all, aes(x = Date, y = Outcome))+
+#     geom_point(aes(color = Pred_vs_Obs))
+#   
+#   
+# )}
+# 
+# 
+# 
+# #plot predictions for one state 
+# outcome_all_state = train %>% 
+#   filter(State == 'PA') %>% 
+#   select(two_week_forecast_date, two_week_outcome) %>%
+#   rename(Date = two_week_forecast_date,
+#          Outcome = two_week_outcome) %>% 
+#   mutate (Pred_vs_Obs = "Observed") %>% 
+#   rbind(tibble(Date = pred_state$two_week_forecast_date,
+#                Outcome = XGBModel_state,
+#                Pred_vs_Obs = "Predicted"))
+# 
+# outcome_plot_state = ggplot(outcome_all_state, aes(x = Date, y = Outcome)) +
+#   geom_point(aes(color = Pred_vs_Obs)) +
+#   stat_smooth(method = 'lm', formula = y ~ poly(x,10), se = TRUE, color = "darkgrey")
+# 
+# 
+# 
+# 
+#  
+# 
+# 
+
+
+
+
+
+#start troubleshooting -----------------
+# 
+#  covid_data_ex <- query_API_fun("2020-03-01", "2021-04-23", "confirmed_7dav_incidence_prop")
+# 
+# 
+#  user_input_example <- user_input_example %>%
+#    mutate(
+#    Date = as.Date(Date, format = "%m/%d/%Y"),
+#    Year = strftime(Date , format = "%Y"),
+#    Week = strftime(Date , format = "%V"),
+#    State = toupper(State)
+#  ) %>%
+# 
+#    group_by(State, Year, Week) %>%
+#    summarise_each(funs(mean)) %>% subset(select = -c(Date)) %>%  mutate_if(is.numeric, ~round(., 0))
+# 
+# 
+#  merged_data_ex <- merge_dataset_fun(covid_data_ex,user_input_example, state_controls)
+
+# shiny_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
+#  
+# # missing_percentages_df = colSums(is.na(merged_data_ex)) %>% 
+# #                          tibble(name=names(.), percent_missing=. * (1/nrow(merged_data_ex)) * 100) %>% 
+# #                          select(name, percent_missing) %>% 
+# #                          #formats the percent missing nicely
+# #                          mutate(percent_missing = round(percent_missing, digits = 2)) %>% 
+# #                          arrange(desc(percent_missing)) %>%
+# #                          as.data.frame()
+#                  
+#  #trouble <- merged_data_ex %>% 
+#              # filter_all(any_vars(is.na(.)))
+#     
+
+#miss_result <- check_missingness(merged_data_ex)
+
+
+
+
+#troubleshooting ends -------------------------------------
  
 }
 
