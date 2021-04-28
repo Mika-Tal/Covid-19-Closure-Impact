@@ -24,24 +24,67 @@ setwd("~/GitHub/Covid-19-Closure-Impact/Data")
 
 df<- read.csv('shiny_merged_dataset_example.csv')
 
-#Dropping the N/A columns as accounted for with the one hot encoding columns (and pervents RF)
-df<- df[, colSums(is.na(df))==0]
 
-df<- select(df, -X)
-df<-droplevels(df)
-str(df)
-
-names(df)[names(df) == "Outcome.Variable"] <- "y" #creating consitency 
+#names(df)[names(df) == "Outcome.Variable"] <- "original_y" #creating consitency 
 #names(df)[names(df) == "Other"] <- "Other_Race"  #"Other is not meaningful in output
-original_df<-df
-drops<-c( "Year", "week_first_date") #droping 
+
+```
+
+```{r}
+##Add column that has case count from2 weeks prior and use as a predictor (pretty much the opposite of Mika's code )
+
+
+original_df = df %>% 
+  mutate_at(c('week_first_date'), ~ as.Date(., "%Y-%m-%d")) %>% 
+  mutate(two_week_prior = week_first_date - 14,
+         two_week_forecast_date = week_first_date + 14) %>% 
+  mutate_if(is.character, as.factor)%>% 
+  select(-1) 
+
+# Get latest date 
+latest_date = max(original_df$week_first_date) 
+
+#Two week outcome 
+twoWeek_df = original_df %>% 
+  select(week_first_date,two_week_prior, State, Outcome.Variable) %>% 
+  rename(two_week_outcome = Outcome.Variable,
+         two_week_forecast_date = week_first_date) 
+
+id<-rownames(twoWeek_df) #could also join on lat/long 
+toWeek<-cbind(id=id, twoWeek_df)
+
+#Merge with original to create a working df
+df = original_df %>% 
+  left_join(twoWeek_df,
+            by = c("State" = "State",
+                   "two_week_forecast_date" = "two_week_forecast_date", 
+                   "two_week_prior" ="two_week_prior")) %>% 
+  mutate(year = as.factor(year(two_week_forecast_date)),
+         week = as.factor(week(two_week_forecast_date)))
+
+df<-df[, -which(names(df) %in% c('two_week_outcome'))]
+
+df$past_two_wk_y <-twoWeek_df$two_week_outcome
+#Dropping the N/A columns as accounted for with the one hot encoding columns (and pervents RF)
+#df<- df[, colSums(is.na(working_df))==0]
+#df<- select(df, -X) handled above
+df<-droplevels(df)
+
+```
+
+
+```{r}
+
+
+drops<-c( "year", "week","week_first_date", "two_week_forecast_date") #droping 
 df <-df[, -which(names(df) %in% drops)]
 ##Moving Ouctome Variable to front of dataset for ease of splitting
 col_idx <- grep("^y$", names(df))
 df <- df[, c(col_idx, (1:ncol(df))[-col_idx])]
 
-```
 
+
+```
 ##Split
 ```{r}
 
@@ -184,12 +227,12 @@ head(features1)
    mutate_at(vars(column_numbers), funs(cube =(.)^3))
 }
 
+ 
 glm_feats<-feat_v2(features1, 3:13) #do not include y or "id" in poly calcs
 
 one<- as.character(top[1,1])
 
-
-
+typeof(features1$two_week_prior)
 
 ```
 
@@ -205,13 +248,16 @@ data2= features1[sample(1:nrow(glm_feats)),]  # permute rows
 
 datatrain = data2[(1:n),]
 datatest = data2[-(1:n),]
+
+
+
 ```
 
 ```{r}
 
 train_glm<- cv.glmnet(
   x = datatrain %>% select(-y, -id) %>% as.matrix(),
-  y = datatrain$y)
+  y = datatrain$y, relax= FALSE)
 
 i <- which(train_glm$lambda == train_glm$lambda.min)
 mse.min <- train_glm$cvm[i]
@@ -249,7 +295,7 @@ mean(combo$Error_abs)
 ggplot(combo, aes(x=Error_abs)) + geom_boxplot()
 ggplot(combo, aes(x=MSE)) + geom_boxplot()
 
-ob_v_pred_test_plot = ggplot(combo, aes(x = Original, y = Preds)) +
+ob_v_pred_test_plot = ggplot(combo, aes(x = Preds, y = Original)) +
   geom_point() +
   geom_abline()
 
@@ -290,6 +336,10 @@ working_df = original_df %>%
   mutate(year = as.factor(year(two_week_forecast_date)),
          week = as.factor(week(two_week_forecast_date)))
 
+
+#"two_week_outcome" = new y 
+
+#filter out the preds from
 ```
 
 ```{r}
