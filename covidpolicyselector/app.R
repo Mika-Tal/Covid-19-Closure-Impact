@@ -362,6 +362,9 @@ body <- dashboardBody(
             
             br(),
             
+            htmlOutput(outputId = "display_model"), 
+            
+            br(),
            
           
             dataTableOutput(outputId = "model_specs"),
@@ -381,10 +384,31 @@ body <- dashboardBody(
             br(),
             
             
-            plotOutput(outputId = "all_predictions")
+            plotOutput(outputId = "all_predictions"),
             
             
+            #creates visual space
+            br(),
             
+            br(),
+            
+            
+          #allows a user to select the state that they would like a prediction for
+            
+           selectInput(inputId = "state",
+                       label = "Select a state that you would like predictions for: ",
+                       choices = c(state_controls %>% select("State"))),
+          
+           br(),
+          
+           br(),
+          
+          
+          plotOutput(outputId = "one_state_preds")
+          
+         
+            
+
     
     
     
@@ -969,6 +993,11 @@ merged_dataset_feat_sel <- reactive({
    
  })
  
+ output$display_model <- renderUI({
+   
+   HTML(paste("Here's the Model Specification for the Best Tuned XGBoost Model:", sep = "<br/><br/>"))
+   
+ })
 
  
  
@@ -1230,88 +1259,56 @@ test_data <- reactive ({
  })
  
  
- # 
- # 
 
- #   
- # #when called, input$state to as the second argument -- add to the model selection page
- # 
- # createPredState <- function(forecast_data, state) {
- #   
- #   latest_date = max(forecast_data$Date)
- #   pred_state = forecast_data[forecast_data$two_week_forecast_date > latest_date, ] %>% 
- #     filter(State == state)
- #   
- # }
+ createPredState <- function(forecast_data, state) {
+
+   latest_date = max(forecast_data$Date)
+   pred_state = forecast_data[forecast_data$two_week_forecast_date > latest_date, ] %>%
+     filter(State == state)
+
+ }
  
  
-
-# 
-# #plot predictions for one state 
-# outcome_all_state = train %>% 
-#   filter(State == 'PA') %>% 
-#   select(two_week_forecast_date, two_week_outcome) %>%
-#   rename(Date = two_week_forecast_date,
-#          Outcome = two_week_outcome) %>% 
-#   mutate (Pred_vs_Obs = "Observed") %>% 
-#   rbind(tibble(Date = pred_state$two_week_forecast_date,
-#                Outcome = XGBModel_state,
-#                Pred_vs_Obs = "Predicted"))
-# 
-# outcome_plot_state = ggplot(outcome_all_state, aes(x = Date, y = Outcome)) +
-#   geom_point(aes(color = Pred_vs_Obs)) +
-#   stat_smooth(method = 'lm', formula = y ~ poly(x,10), se = TRUE, color = "darkgrey")
-# 
-# 
-# 
-# 
-#  
-# 
-# 
+ #create a new reactive dataframe for the desired predictions for a given state
+pred_state <- reactive({
+  
+  createPredState(forecast_data(), input$state)
+  
+})
 
 
+outcome_state <- reactive({
+  
+  XGBModel_state <- XGBpredictions(xgb_model_output(), pred_state())
+  
+    train_data() %>% 
+    filter(State == input$state) %>% 
+    select(two_week_forecast_date, two_week_outcome) %>%
+    rename(Date = two_week_forecast_date,
+           Outcome = two_week_outcome) %>% 
+    mutate (Pred_vs_Obs = "Observed") %>% 
+    rbind(tibble(Date = pred_state()$two_week_forecast_date,
+                 Outcome = XGBModel_state,
+                 Pred_vs_Obs = "Predicted"))
 
+})
 
+ 
+output$one_state_preds <- renderPlot({
+  
+  outcome_state() %>% 
+    
+    ggplot(aes(x = Date, y = Outcome)) +
+    
+    geom_point(aes(color = Pred_vs_Obs)) +
+    
+    stat_smooth(method = 'lm', formula = y ~ poly(x,10), se = TRUE, color = "darkgrey")
+    
+  
+  
+  
+})
 
-#start troubleshooting -----------------
-# 
-#  covid_data_ex <- query_API_fun("2020-03-01", "2021-04-23", "confirmed_7dav_incidence_prop")
-# 
-# 
-#  user_input_example <- user_input_example %>%
-#    mutate(
-#    Date = as.Date(Date, format = "%m/%d/%Y"),
-#    Year = strftime(Date , format = "%Y"),
-#    Week = strftime(Date , format = "%V"),
-#    State = toupper(State)
-#  ) %>%
-# 
-#    group_by(State, Year, Week) %>%
-#    summarise_each(funs(mean)) %>% subset(select = -c(Date)) %>%  mutate_if(is.numeric, ~round(., 0))
-# 
-# 
-#  merged_data_ex <- merge_dataset_fun(covid_data_ex,user_input_example, state_controls)
-
-# shiny_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
-#  
-# # missing_percentages_df = colSums(is.na(merged_data_ex)) %>% 
-# #                          tibble(name=names(.), percent_missing=. * (1/nrow(merged_data_ex)) * 100) %>% 
-# #                          select(name, percent_missing) %>% 
-# #                          #formats the percent missing nicely
-# #                          mutate(percent_missing = round(percent_missing, digits = 2)) %>% 
-# #                          arrange(desc(percent_missing)) %>%
-# #                          as.data.frame()
-#                  
-#  #trouble <- merged_data_ex %>% 
-#              # filter_all(any_vars(is.na(.)))
-#     
-
-#miss_result <- check_missingness(merged_data_ex)
-
-
-
-
-#troubleshooting ends -------------------------------------
  
 }
 
