@@ -347,6 +347,8 @@ body <- dashboardBody(
             actionButton(inputId = "runxgb",
                          label = "Click to Run the XGBoost Model"),
             
+            
+            #creates visual space
             br(),
             
             br(), 
@@ -355,12 +357,33 @@ body <- dashboardBody(
             htmlOutput(outputId = "xgb_pls_wait"),    
             
            
+            #creates visual space
+            br(),
+            
+            br(),
             
            
           
             dataTableOutput(outputId = "model_specs"),
             
-            plotOutput(outputId = "preds_vs_observed")
+            
+            #creates visual space
+            br(),
+            
+            br(),
+            
+            plotOutput(outputId = "preds_vs_observed"),
+            
+            
+            #creates visual space
+            br(),
+            
+            br(),
+            
+            
+            plotOutput(outputId = "all_predictions")
+            
+            
             
     
     
@@ -973,10 +996,8 @@ merged_dataset_feat_sel <- reactive({
    working_df = original_df %>%
      left_join(twoWeek_df,
                by = c("State" = "State",
-                      "two_week_forecast_date" = "two_week_forecast_date")) %>%
-     mutate(year = as.factor(year(two_week_forecast_date)),
-            week = as.factor(week(two_week_forecast_date)))
-
+                      "two_week_forecast_date" = "two_week_forecast_date"))
+  
    return(working_df)
  }
  
@@ -992,66 +1013,13 @@ merged_dataset_feat_sel <- reactive({
 
 
 
-#  createTrainSet <- function(forecast_data) {
-# 
-#   latest_date = max(forecast_data$week_first_date)
-# 
-#   train = forecast_data[forecast_data$two_week_forecast_date <= (latest_date - 14), ] %>% na.omit()
-# 
-#   return(train)
-# }
-# 
-# createTestSet <- function(forecast_data) {
-#   
-#   latest_date = max(forecast_data$week_first_date)
-#   
-#   test = forecast_data[(forecast_data$two_week_forecast_date <= latest_date) &
-#                          (forecast_data$two_week_forecast_date > (latest_date - 14)), ] %>% na.omit()
-# 
-#   return(test)
-# }
-# 
-# 
-# 
-# createPredSet <- function(forecast_data) {
-#   
-#   latest_date = max(forecast_data$week_first_date)
-#   
-# 
-#   pred = forecast_data[forecast_data$two_week_forecast_date > latest_date, ]
-#   
-#   return(pred)
-#   
-# }
-#   
-# #when called, input$state to as the second argument -- add to the model selection page
-# 
-# createPredState <- function(forecast_data, state) {
-#   
-#   latest_date = max(forecast_data$week_first_date)
-#   pred_state = forecast_data[forecast_data$two_week_forecast_date > latest_date, ] %>% 
-#     filter(State == state)
-#   
-# }
-  
-
-
-
-# XGBPred = xgb.DMatrix(data.matrix(pred %>%
-#                                     select(-c(two_week_forecast_date,
-#                                               two_week_outcome))))
-# 
-# XGBPred_state = xgb.DMatrix(data.matrix(pred_state %>%
-#                                           select(-c(two_week_forecast_date,
-#                                                     two_week_outcome))))
-
  
  #creates the training dataset for the XGBoost model 
  createXGBTrainSet <- function(forecast_data) {
    
    latest_date = max(forecast_data$Date)
    
-   train = forecast_data[forecast_data$two_week_forecast_date <= (latest_date - 14), ] %>% na.omit()
+   train = forecast_data[forecast_data$two_week_forecast_date <= (latest_date - 14), ]
    
    return(train)
  }
@@ -1064,146 +1032,220 @@ merged_dataset_feat_sel <- reactive({
    
  })
 
- 
 
 
 trainXGBoost <- function(train_df) {
 
-#Convert the predictor variable matrices to xgb.DMatrix data types
-XGBTrain = xgb.DMatrix(data.matrix(train_df %>%
-                                     select(-c(two_week_forecast_date,
-                                               two_week_outcome))))
-#Define random grid parameters for tuning the models
-XGBtc=trainControl(
-  method='cv',
-  number=5,
-  allowParallel=TRUE,
-  verboseIter=FALSE,
-  returnData=FALSE
-)
-# create grid for tuning hyperparameters
-XGBtg <- expand.grid(nrounds = 20,
-                     max_depth = c(5, 10, 15),
-                     colsample_bytree = seq(0.5, 0.9, length.out = 5),
-                     eta = c(0.1, 0.2, 0.4),
-                     gamma=c(0, 2, 3),
-                     min_child_weight = 1,
-                     subsample = 0.75
-)
+    #Convert the predictor variable matrices to xgb.DMatrix data types
+    XGBTrain = xgb.DMatrix(data.matrix(train_df %>%
+                                         select(-c(two_week_forecast_date,
+                                                   two_week_outcome))))
+    #Define random grid parameters for tuning the models
+    XGBtc=trainControl(
+      method='cv',
+      number=5,
+      allowParallel=TRUE,
+      verboseIter=FALSE,
+      returnData=FALSE
+    )
+    # create grid for tuning hyperparameters
+    XGBtg <- expand.grid(nrounds = 20, #temporary value to facilitate faster run time during app construnction c(50, 100, 250),
+                         max_depth = 5, #c(5, 10, 15),
+                         colsample_bytree = 0.5, #seq(0.5, 0.9, length.out = 5),
+                         eta = 0.1, #c(0.1, 0.2, 0.4),
+                         gamma=c(0, 2, 3),
+                         min_child_weight = 1,
+                         subsample = 0.75
+    )
+    
+    
+    # train model - with dates and state
+    XGBModel = train(
+      XGBTrain, train_df$two_week_outcome,
+      trControl = XGBtc,
+      tuneGrid = XGBtg,
+      method = "xgbTree")
+    
+  
 
-
-# train model - with dates and state
-XGBModel = train(
-  XGBTrain, train_df$two_week_outcome,
-  trControl = XGBtc,
-  tuneGrid = XGBtg,
-  method = "xgbTree")
-
-
-best_model <- XGBModel$bestTune  
-
-return(best_model)
+return(XGBModel)
 
 }
+
+
+#creates the XGB model to be used by the later functions
 
 
 #captures the results of running the XGB model
 xgb_model_output <- eventReactive(input$runxgb, {
   
-  trainXGBoost(train_data())
+     trainXGBoost(train_data())
+  
 }
 )
   
-
   
-  
-
- #test dataframe 
+ #outputs the model specifications for the XGboost model
  output$model_specs <- renderDataTable({
    
-   DT::datatable(data = xgb_model_output(),
+   best_model <- xgb_model_output()$bestTune
+   
+   DT::datatable(data = best_model,
                  rownames = FALSE,
                  options = list(scrollX = T))
    
    
  })
  
- # #display the best model specifications -- using renderTable or something..
- #   
- # XGBModel$bestTune  
+ 
+ 
 # 
-# createDenseMatrix <- function() {
-#   
-#   XGBTest = xgb.DMatrix(data.matrix(test %>% #change the name of the dataset
-#                                       select(-c(two_week_forecast_date,
-#                                                 two_week_outcome))))
-# }
-#   
-# 
-# 
-# predictXGBoost <- function(XGBModel, predict_df) {
-#   
-#   xgbmodel_predictions = predict(XGBModel, predict_df)
-#   
-#   return(xgbmodel_predictions)
-#   
-# 
-# }
-# 
-# 
-# 
-# 
-# calculateRSME <- function()
-#   
-#   
+#creates the test set
+ createXGBTestSet <- function(forecast_data) {
 
-# 
-#   
-#   
-# 
-# XGBRMSE = sqrt(mean ((test$two_week_outcome - XGBModel_test) ^ 2 ) )
-# 
-# XGBModel_pred = predict(XGBModel, XGBPred)
-# 
-# XGBModel_state = predict(XGBModel, XGBPred_state)
-# 
-# 
-# #Plot observed vs. predicted
-# obs_vs_pred = test %>% 
-#   select(two_week_outcome) %>% 
-#   rename(Observed = two_week_outcome) %>% 
-#   bind_cols(tibble(Predicted = XGBModel_test)) %>% 
-#   mutate(Observed = log(Observed),
-#          Predicted = log(Predicted))
-# 
-# 
-# #goodness of fit plot
-# obs_vs_pred_plot = ggplot(obs_vs_pred, aes(x = Observed, y = Predicted)) +
-#   geom_point() +
-#   geom_abline() +
-#   xlab("Log(Observed)") +
-#   ylab("Log(Predicted)")
-# 
-# 
-# #Plot Predictions -- for all of the states
-# 
-# output$plot_all_states <- renderPlot{(
-#   outcome_all = train %>% 
-#     select(two_week_forecast_date, two_week_outcome) %>%
-#     rename(Date = two_week_forecast_date,
-#            Outcome = two_week_outcome) %>% 
-#     mutate (Pred_vs_Obs = "Observed") %>% 
-#     rbind(tibble(Date = pred$two_week_forecast_date,
-#                  Outcome = XGBModel_pred,
-#                  Pred_vs_Obs = "Predicted"))
-#   
-#   outcome_plot_all = ggplot(outcome_all, aes(x = Date, y = Outcome))+
-#     geom_point(aes(color = Pred_vs_Obs))
-#   
-#   
-# )}
-# 
-# 
+   latest_date = max(forecast_data$Date)
+
+   test = forecast_data[(forecast_data$two_week_forecast_date <= latest_date) &
+                          (forecast_data$two_week_forecast_date > (latest_date - 14)), ]
+
+   return(test)
+
+ }
+
+
+#creates a reactive dataframe for the test data
+test_data <- reactive ({
+
+   createXGBTestSet(forecast_data())
+
+
+ })
+
+ #creates the predictions dataset
+ createPredSet <- function(forecast_data) {
+
+   latest_date = max(forecast_data$Date)
+
+
+   pred = forecast_data[forecast_data$two_week_forecast_date > latest_date, ]
+
+   return(pred)
+
+ }
+
+ #creates a reactive dataframe for the predictions dataset
+ preds_data <- reactive ({
+
+   createPredSet(forecast_data())
+
+
+ })
+#  
+# #predictions using the different datasets 
+#  
+ #Get predctions based on XGB mmodel
+ XGBpredictions <- function(model, data){
+   #Convert data frame into dense matrix for XGB model
+   matrixData = xgb.DMatrix(data.matrix(data %>%
+                                          select(-c(two_week_forecast_date,
+                                                    two_week_outcome))))
+   #Get predicitons on test set
+   XGBpredicitons=predict(model, matrixData)
+   return(XGBpredicitons)
+ }
+
+
+#creates a dataframe for the results of XGBoost model predictions
+ test_data_preds <- reactive({
+   XGBpredictions(xgb_model_output(), test_data())
+
+ })
+#  
+#  #test_data(), test_dat_preds()
+#  
+ combinedObvsPredsDf <- function(test, predicted){
+
+   #Create dataframe
+   obs_vs_pred = test %>%
+     select(two_week_outcome) %>%
+     rename(Observed = two_week_outcome) %>%
+     bind_cols(tibble(Predicted = predicted)) %>%
+     mutate(Observed = log(Observed),
+            Predicted = log(Predicted))
+
+   return(obs_vs_pred)
+
+ }
+
+ output$preds_vs_observed <- renderPlot({
+
+   new_df <- combinedObvsPredsDf(test_data(), test_data_preds())
+
+
+   #creates the required dataframe
+     new_df %>%
+     ggplot(aes(x = Observed, y = Predicted)) +
+     geom_point() +
+     geom_abline() +
+     xlab("Log(Observed)") +
+     ylab("Log(Predicted)")
+
+
+
+ })
+ 
+ #creates a new reactive dataframe
+ 
+ outcome_all <- reactive({
+   
+   XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
+   
+   train_data() %>% 
+     select(two_week_forecast_date, two_week_outcome) %>%
+     rename(Date = two_week_forecast_date,
+            Outcome = two_week_outcome) %>% 
+     mutate (Pred_vs_Obs = "Observed") %>% 
+     rbind(tibble(Date = preds_data()$two_week_forecast_date,
+                  Outcome = XGBPredsPred,
+                  Pred_vs_Obs = "Predicted"))
+   
+   
+ })
+ 
+ 
+ 
+   
+ 
+ 
+#plots the resulting predictions
+ output$all_predictions <- renderPlot({
+   
+    outcome_all() %>% 
+   
+      ggplot(aes(x = Date, y = Outcome)) +
+     
+       geom_point(aes(color = Pred_vs_Obs)) 
+   
+   
+ })
+ 
+ 
+ # 
+ # 
+
+ #   
+ # #when called, input$state to as the second argument -- add to the model selection page
+ # 
+ # createPredState <- function(forecast_data, state) {
+ #   
+ #   latest_date = max(forecast_data$Date)
+ #   pred_state = forecast_data[forecast_data$two_week_forecast_date > latest_date, ] %>% 
+ #     filter(State == state)
+ #   
+ # }
+ 
+ 
+
 # 
 # #plot predictions for one state 
 # outcome_all_state = train %>% 
