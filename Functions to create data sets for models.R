@@ -244,13 +244,13 @@ obs_vs_pred_plot(test, XGBPredsTest)
 XGBPredsPred = XGBpredictions(XGBModel,pred)
 #Plot predictions all states - no need to save to variable
 predictions_all_plot(train,pred,XGBPredsPred)
-#Prediction summary table by week
+#Prediction summary table by week - no need to save to variable
 predictions_tabular(XGBPredsPred)
 #Get pred set predictions - by state. Save to variable
 XGBPredsState = XGBpredictions(XGBModel,pred_state)
 #Plot predictions all states - no need to save to variable
 predictions_by_state(train, 'MA', pred_state, XGBPredsState)
-#Prediction summary table by selected state
+#Prediction summary table by selected state - no need to save to variable
 predictions_state_tabular(XGBPredsState)
 
 
