@@ -24,7 +24,25 @@ setwd("~/GitHub/Covid-19-Closure-Impact/Data")
 
 #df<-read.csv('Covid_Pred.csv')
 
-df<- read.csv('shiny_merged_dataset_example.csv')
+df<- read.csv('shiny_merged_dataset_example.csv')%>% 
+  mutate_at(c('week_first_date'), ~ as.Date(., "%Y-%m-%d")) %>% 
+  mutate(two_week_forecast_date = week_first_date + 14) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  select(-1)
+# Get latest date 
+latest_date = max(original_df$week_first_date)
+#Two week outcome 
+twoWeek_df = original_df %>% 
+  select(week_first_date, State, Outcome.Variable) %>% 
+  rename(two_week_outcome = Outcome.Variable,
+         two_week_forecast_date = week_first_date) 
+#Merge with original to create a working df
+working_df = original_df %>% 
+  left_join(twoWeek_df,
+            by = c("State" = "State",
+                   "two_week_forecast_date" = "two_week_forecast_date")) %>% 
+  mutate(year = as.factor(year(two_week_forecast_date)),
+         week = as.factor(week(two_week_forecast_date)))
 
 
 #names(df)[names(df) == "Outcome.Variable"] <- "original_y" #creating consitency 
@@ -70,31 +88,6 @@ bestmtry_var<- bestmtry[1,1].0
 
 ```
 
-#df1 = df %>%
- # mutate_if(is.character, as.factor) #%>% 
-  #mutate_if(is.factor, forcats::fct_lump_min, min=100) 
-#df1$new_cases<- as.factor(df1$new_cases)
-
-
-t<- as.numeric(count(df)*.75)
-
-set.seed(12345) 
-df2 = df[sample(1:nrow(df)),]
-train = df2[1:t,]
-test = df2[-(1:t),]
-
-
-
-
-control <- trainControl(method="repeatedcv", number=10, repeats=3, search="grid")
-set.seed(seed)
-tunegrid <- expand.grid(.mtry=c(1:15))
-rf_gridsearch <- train(Class~., data=dataset, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control)
-print(rf_gridsearch)
-plot(rf_gridsearch)
- 
-
-
 
 ```{r}
 
@@ -138,7 +131,7 @@ Process needed to create 2D for 'state' to be incorporated into GLM with poly op
 
 ```{r}
 
-setwd("~/GitHub/Covid-19-Closure-Impact/Data")
+#setwd("~/GitHub/Covid-19-Closure-Impact/Data")
 
 geo<- read.csv('us-zip-code-latitude-and-longitude.csv', header= FALSE, stringsAsFactors = FALSE)
 
@@ -156,7 +149,6 @@ state_latLong <- geo%>%
   summarise(Latitude = mean(Latitude, na.rm = TRUE),
             Longitude = mean(Longitude, na.rm = TRUE))
 
-
 ```
 
 #Joining Long/Lat data and selected features
@@ -165,7 +157,6 @@ state_latLong <- geo%>%
 features<- left_join(new, state_latLong, by='State')
 id<-rownames(features)
 features<-cbind(id=id, features)
-
 
 ```
 
@@ -207,8 +198,6 @@ data2= features1[sample(1:nrow(glm_feats)),]  # permute rows
 datatrain = data2[(1:n),]
 datatest = data2[-(1:n),]
 
-
-
 ```
 
 
@@ -230,7 +219,6 @@ combo<-combo%>%
   rename(Preds='1', 
          Original = V2)
 
-
 ```
 
 ```{r}
@@ -240,8 +228,6 @@ plot(glm_preds,xvar="lambda",label=TRUE)
 
 ```
 ```{r}
-
-
 
 plot(combo)
 
@@ -256,6 +242,29 @@ ggplot(combo, aes(x=Error_abs)) + geom_boxplot()
 ggplot(combo, aes(x=MSE)) + geom_boxplot()
 
 ```
+
+
+#df1 = df %>%
+# mutate_if(is.character, as.factor) #%>% 
+#mutate_if(is.factor, forcats::fct_lump_min, min=100) 
+#df1$new_cases<- as.factor(df1$new_cases)
+
+t<- as.numeric(count(df)*.75)
+
+set.seed(12345) 
+df2 = df[sample(1:nrow(df)),]
+train = df2[1:t,]
+test = df2[-(1:t),]
+
+
+control <- trainControl(method="repeatedcv", number=10, repeats=3, search="grid")
+set.seed(seed)
+tunegrid <- expand.grid(.mtry=c(1:15))
+rf_gridsearch <- train(Class~., data=dataset, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control)
+print(rf_gridsearch)
+plot(rf_gridsearch)
+ 
+
 
 ####GAM not used
 
@@ -277,8 +286,6 @@ ob_v_pred_test_plot = ggplot(combo, aes(x = Preds, y = Original)) +
 
 
 ob_v_pred_test_plot #way over estimating 
-```
-
 
 
 
