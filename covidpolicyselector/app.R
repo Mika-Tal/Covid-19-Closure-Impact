@@ -44,7 +44,8 @@ sidebar <- dashboardSidebar(
     menuItem("Data Merging", tabName = "merging"),
     menuItem("Data Pre-Processing", tabName = "missing"),
     menuItem("Feature Selection", tabName = "features"),
-    menuItem("Model Building ", tabName = "model")
+    menuItem("Model Building ", tabName = "model"),
+    menuItem("Results", tabName = "results")
   )
 )
 
@@ -407,13 +408,29 @@ body <- dashboardBody(
           plotOutput(outputId = "one_state_preds")
           
          
+    
+    ),
+    
+    
+    tabItem("results",
             
-
-    
-    
-    
-    )
-    
+            dataTableOutput("predictions_tabular"),
+            
+            br(),
+            
+            br(),
+            
+            selectInput(inputId = "state_2",
+                        label = "Select a state that you would like predictions for: ",
+                        choices = c(state_controls %>% select("State"))),
+            
+            br(),
+            
+            br(),
+            
+            dataTableOutput("predictions_state_tabular")
+            
+            )
     
     
   )
@@ -1306,6 +1323,55 @@ output$one_state_preds <- renderPlot({
     
   
   
+  
+})
+
+
+#Results Page -----------------------------------------------------------
+
+
+#prints out the results of running the XGBoost Model in tabular form
+output$predictions_tabular <- renderDataTable({
+  
+  #Create week labels column
+  Week = rep("Week_1", 51) %>% c(rep("Week_2", 51))
+  
+  XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
+  
+  
+  #Summarise predictions by prediction week
+  preds_all = data.frame(Prediction  = XGBPredsPred, Week = Week) %>%
+    group_by(Week) %>% 
+    summarise(Total = sum(Prediction),
+              Average = mean(Prediction))
+    
+  DT::datatable(data = preds_all,
+                rownames = FALSE, options = list(scrollX = T))
+  
+  
+})
+
+#another reactive object for the second state input option
+pred_state_2 <- reactive({
+  
+  createPredState(forecast_data(), input$state_2)
+  
+})
+
+
+#prints out the predictions by state
+output$predictions_state_tabular <- renderDataTable({
+  
+  #Create week labels column
+  Week = c("Week_1", "Week_2")
+  
+  #Summarise predictions by prediction week
+  XGBPredsState <- XGBpredictions(xgb_model_output(), pred_state_2())
+  
+  preds_state = data.frame(Week = Week, Prediction  = XGBPredsState) 
+  
+  DT::datatable(data = preds_state,
+                rownames = FALSE, options = list(scrollX = T))
   
 })
 
