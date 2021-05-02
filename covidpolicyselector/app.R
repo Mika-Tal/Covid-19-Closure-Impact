@@ -17,6 +17,12 @@ library(tidymodels)
 library(covidcast)
 library(lubridate)
 library(randomForest)
+library(xgboost)
+library(caret)
+# add these libraries 
+libs = c("tidyverse","data.table","stargazer", "caret", "e1071", "splines",
+         "randomForest", "C50", "xgboost", "ggplot2", "cowplot", "forecast")
+
 
 #read in static datasets -- controls only and the sample user input data
 state_controls <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/state_controls.csv")
@@ -77,7 +83,7 @@ body <- dashboardBody(
             dateRangeInput(inputId = "dates_of_interest",
                            label = "Choose the Date Range of Interest for COVID-19 Data",
                            start = "2020-03-01",
-                           end = "2021-03-01",
+                           end = "2021-04-09",
                            format = "yyyy-mm-dd",
                            separator = "-"),
             
@@ -187,7 +193,7 @@ body <- dashboardBody(
                                           selected = "head"),
                              
                              #resulting data from file upload
-                             dataTableOutput(outputId = "contents")),
+                             dataTableOutput(outputId = "contents"))
             
             
             
@@ -240,7 +246,39 @@ body <- dashboardBody(
     
     
     #Missingness Imputation page-----------------------------------------------
-    tabItem("missing"
+    tabItem("missing",
+            
+            #displays words to go before displaying the dataTable output
+            htmlOutput(outputId = "no_miss_mess"),
+            
+            #adds visual space
+            
+            br(),
+            
+            br(),
+            
+            #displays the % of missingness in the data
+            dataTableOutput(outputId = "missing_stats"),
+            
+            #adds visual space 
+            
+            br(),
+            
+            br(),
+            
+            #allows the user to decide how to deal with missingness
+            radioButtons(inputId = "handle_missingness",
+                         label = "Do you want handle missing values?",
+                         choices = c("Impute missing values", "Drop rows with missing values" , "Delete features with missing values"),
+                         selected = c("Drop rows with missing values")),
+            
+            #adds visual space
+            br(),
+            
+            br(),
+            
+            #gives the user the option to inspect their dataset after dealing with missingness
+            dataTableOutput(outputId = "data_aft_missing")
             
     ),
     
@@ -302,7 +340,81 @@ body <- dashboardBody(
     ),
     
     #Model Building page ------------------------------------------------------------------------------
-    tabItem("model")
+    tabItem("model",
+     
+            
+            #click to run the XGBoost model
+            actionButton(inputId = "runxgb",
+                         label = "Click to Run the XGBoost Model"),
+            
+            
+            #creates visual space
+            br(),
+            
+            br(), 
+            
+            #Gives the user a message while waiting for XGBoost to run
+            htmlOutput(outputId = "xgb_pls_wait"),    
+            
+           
+            #creates visual space
+            br(),
+            
+            br(),
+            
+            htmlOutput(outputId = "display_model"), 
+            
+            br(),
+           
+          
+            dataTableOutput(outputId = "model_specs"),
+            
+            
+            #creates visual space
+            br(),
+            
+            br(),
+            
+            plotOutput(outputId = "preds_vs_observed"),
+            
+            
+            #creates visual space
+            br(),
+            
+            br(),
+            
+            
+            plotOutput(outputId = "all_predictions"),
+            
+            
+            #creates visual space
+            br(),
+            
+            br(),
+            
+            
+          #allows a user to select the state that they would like a prediction for
+            
+           selectInput(inputId = "state",
+                       label = "Select a state that you would like predictions for: ",
+                       choices = c(state_controls %>% select("State"))),
+          
+           br(),
+          
+           br(),
+          
+          
+          plotOutput(outputId = "one_state_preds")
+          
+         
+            
+
+    
+    
+    
+    )
+    
+    
     
   )
 )
@@ -343,25 +455,19 @@ server <- function(input, output) {
       
       #conduct necessary data transformations
       select("geo_value", "time_value","value") %>%
-      rename( State = geo_value , outcome_variable = value) %>%
+      rename( State = geo_value , covid_measure = value) %>%
       
       mutate(
         Year = strftime(time_value , format = "%Y"),
         Week = strftime(time_value , format = "%V"),
         State = toupper(State),
-        Day = ymd(time_value) #ADDED
-      ) %>% 
-      group_by(State, Year, Week) %>% 
-      
-      
-      summarise(
-         
-        week_first_date = min(Day), #ADDED
-        `Outcome Variable` = mean(outcome_variable),
-       
-        
-      )
+        Day = strftime(time_value , format = "%A"),
+        Date = ymd(time_value)
+      ) %>%
+      subset(Day == "Monday")
     
+    covid_data <- subset(covid_data, select=-c(Day,time_value))
+      
     return(covid_data)
     
   }
@@ -561,14 +667,97 @@ only_sel_ctrls <- reactive({
 
   #Missingness Imputation Page Output ---------------------------------------------
   
- #  
- # df<- df[, colSums(is.na(df))==0]
- # df<- select(df, -X)
- # df<-droplevels(df)
- # str(df)
- # 
 
-  
+ check_missingness <- function(merged_df ){
+   missing_percentages_df = colSums(is.na(merged_df)) %>% 
+     tibble(name=names(.), percent_missing=. * (1/nrow(merged_df)) * 100) %>% 
+     select(name, percent_missing) %>% 
+     
+     #formats the percent missing nicely
+     mutate(percent_missing = round(percent_missing, digits = 2)) %>% 
+     arrange(desc(percent_missing)) %>%
+     as.data.frame()
+   
+   
+   return(missing_percentages_df)
+ }
+ 
+ 
+
+ #This function takes two arguments, first is the merged dataset (dataframe) and second is the user
+ # choice on wether to drop columns with missing data or drop rows or just impute missing values
+ handle_missingness <- function(merged_df , choice){
+   
+   #make necessary data type changes
+   miss_df <- merged_df %>%
+     ungroup() %>%
+     mutate_if(is.character, as.factor) %>% 
+     mutate_if(is.Date, as.factor)
+
+   
+   if (choice == "Impute missing values"){
+     imputer_recipe = 
+       miss_df %>%
+       recipe(formula = "~ . - covid_measure") %>%
+       step_knnimpute(all_predictors(),neighbors = 1)
+     
+     merged_imputed_df = prep(imputer_recipe) %>%
+       bake(new_data = miss_df)
+   }
+   
+   if (choice == "Drop rows with missing values"){
+     merged_imputed_df <- merged_df[rowSums(is.na(merged_df)) <= 0,]
+     
+   }
+   if (choice == "Delete features with missing values"){
+     merged_imputed_df <- merged_df %>%  select_if(~ !any(is.na(.)))
+     
+   }
+   
+   return(merged_imputed_df)
+   
+   
+ }
+ 
+
+ output$no_miss_mess <- renderUI({
+   
+   HTML(paste("Here's The Amount of Missingness in the Data:", sep = "<br/><br/>"))
+   
+ })
+ 
+ 
+ #displays the new dataset after addressing potential missingnes in the dataset
+ output$missing_stats <- renderDataTable({
+   
+   merged_df <- merged_dataset()
+   miss_stats_df <- check_missingness(merged_df)
+   
+   DT::datatable(data = miss_stats_df,
+                 rownames = FALSE,
+                 options = list(scrollX = T))
+   
+ })
+ 
+
+ #displays the dataset after missingness has been dealt with, according to the "handle_missingness" function
+ 
+ #new dataset after missingness has been handled
+ data_after_missing <- reactive({
+   handle_missingness(merged_dataset(), input$handle_missingness)
+ })
+ 
+ output$data_aft_missing <- renderDataTable({
+   
+   merged_df <- merged_dataset()
+   df_aft_miss <- data_after_missing()
+   DT::datatable(data = df_aft_miss,
+                 rownames = FALSE,
+                 options = list(scrollX = T))
+   
+   
+ })
+
   
   
   #Feature Selection Page Output ---------------------------------------------------
@@ -795,10 +984,332 @@ merged_dataset_feat_sel <- reactive({
   
   
   
+
+#Model Building Page ---------------------------------------------------------------------
+ 
+ output$xgb_pls_wait <- renderUI({
+   
+   HTML(paste("Please wait while the XGBoost Model Runs...", sep = "<br/><br/>"))
+   
+ })
+ 
+ output$display_model <- renderUI({
+   
+   HTML(paste("Here's the Model Specification for the Best Tuned XGBoost Model:", sep = "<br/><br/>"))
+   
+ })
+
+ 
+ 
+#creates a new variable to capture the two-week forecast
+
+ addTwoWeekForecast <- function(merged_df) {
+   
+   #ungroups the data 
+   #merged_df <- merged_df %>% ungroup()
+   
+   #create a two week forecast variable
+   original_df = merged_df %>% 
+     mutate_at(c('Date'), ~ as.Date(., "%Y-%m-%d")) %>% 
+     mutate(two_week_forecast_date = Date + 14) %>% 
+     mutate_if(is.character, as.factor) 
+   
+   #map the two week forecast variable to the outcome variable in two weeks
+   twoWeek_df = original_df %>%
+     select(Date, State, covid_measure) %>%
+     rename(two_week_outcome = covid_measure,
+            two_week_forecast_date = Date)
+
+
+   #combine the original dataframe with the new dataframe with the two week forecast
+   working_df = original_df %>%
+     left_join(twoWeek_df,
+               by = c("State" = "State",
+                      "two_week_forecast_date" = "two_week_forecast_date"))
+  
+   return(working_df)
+ }
+ 
+
+ #make a reactive data frame after the two week forecast has been added
+ forecast_data <- reactive({
+   
+   addTwoWeekForecast(data_after_missing()) 
+ 
+ })
+ 
+ 
+
+
+
+ 
+ #creates the training dataset for the XGBoost model 
+ createXGBTrainSet <- function(forecast_data) {
+   
+   latest_date = max(forecast_data$Date)
+   
+   train = forecast_data[forecast_data$two_week_forecast_date <= (latest_date - 14), ]
+   
+   return(train)
+ }
+ 
+ #creates a reactive dataframe for the training data 
+ train_data <- reactive ({
+   
+   createXGBTrainSet(forecast_data())
+   
+   
+ })
+
+
+
+trainXGBoost <- function(train_df) {
+
+    #Convert the predictor variable matrices to xgb.DMatrix data types
+    XGBTrain = xgb.DMatrix(data.matrix(train_df %>%
+                                         select(-c(two_week_forecast_date,
+                                                   two_week_outcome))))
+    #Define random grid parameters for tuning the models
+    XGBtc=trainControl(
+      method='cv',
+      number=5,
+      allowParallel=TRUE,
+      verboseIter=FALSE,
+      returnData=FALSE
+    )
+    # create grid for tuning hyperparameters
+    XGBtg <- expand.grid(nrounds = 20, #temporary value to facilitate faster run time during app construnction c(50, 100, 250),
+                         max_depth = 5, #c(5, 10, 15),
+                         colsample_bytree = 0.5, #seq(0.5, 0.9, length.out = 5),
+                         eta = 0.1, #c(0.1, 0.2, 0.4),
+                         gamma=c(0, 2, 3),
+                         min_child_weight = 1,
+                         subsample = 0.75
+    )
+    
+    
+    # train model - with dates and state
+    XGBModel = train(
+      XGBTrain, train_df$two_week_outcome,
+      trControl = XGBtc,
+      tuneGrid = XGBtg,
+      method = "xgbTree")
+    
+  
+
+return(XGBModel)
+
+}
+
+
+#creates the XGB model to be used by the later functions
+
+
+#captures the results of running the XGB model
+xgb_model_output <- eventReactive(input$runxgb, {
+  
+     trainXGBoost(train_data())
+  
+}
+)
+  
+  
+ #outputs the model specifications for the XGboost model
+ output$model_specs <- renderDataTable({
+   
+   best_model <- xgb_model_output()$bestTune
+   
+   DT::datatable(data = best_model,
+                 rownames = FALSE,
+                 options = list(scrollX = T))
+   
+   
+ })
+ 
+ 
+ 
+# 
+#creates the test set
+ createXGBTestSet <- function(forecast_data) {
+
+   latest_date = max(forecast_data$Date)
+
+   test = forecast_data[(forecast_data$two_week_forecast_date <= latest_date) &
+                          (forecast_data$two_week_forecast_date > (latest_date - 14)), ]
+
+   return(test)
+
+ }
+
+
+#creates a reactive dataframe for the test data
+test_data <- reactive ({
+
+   createXGBTestSet(forecast_data())
+
+
+ })
+
+ #creates the predictions dataset
+ createPredSet <- function(forecast_data) {
+
+   latest_date = max(forecast_data$Date)
+
+
+   pred = forecast_data[forecast_data$two_week_forecast_date > latest_date, ]
+
+   return(pred)
+
+ }
+
+ #creates a reactive dataframe for the predictions dataset
+ preds_data <- reactive ({
+
+   createPredSet(forecast_data())
+
+
+ })
+#  
+# #predictions using the different datasets 
+#  
+ #Get predctions based on XGB mmodel
+ XGBpredictions <- function(model, data){
+   #Convert data frame into dense matrix for XGB model
+   matrixData = xgb.DMatrix(data.matrix(data %>%
+                                          select(-c(two_week_forecast_date,
+                                                    two_week_outcome))))
+   #Get predicitons on test set
+   XGBpredicitons=predict(model, matrixData)
+   return(XGBpredicitons)
+ }
+
+
+#creates a dataframe for the results of XGBoost model predictions
+ test_data_preds <- reactive({
+   XGBpredictions(xgb_model_output(), test_data())
+
+ })
+#  
+#  #test_data(), test_dat_preds()
+#  
+ combinedObvsPredsDf <- function(test, predicted){
+
+   #Create dataframe
+   obs_vs_pred = test %>%
+     select(two_week_outcome) %>%
+     rename(Observed = two_week_outcome) %>%
+     bind_cols(tibble(Predicted = predicted)) %>%
+     mutate(Observed = log(Observed),
+            Predicted = log(Predicted))
+
+   return(obs_vs_pred)
+
+ }
+
+ output$preds_vs_observed <- renderPlot({
+
+   new_df <- combinedObvsPredsDf(test_data(), test_data_preds())
+
+
+   #creates the required dataframe
+     new_df %>%
+     ggplot(aes(x = Observed, y = Predicted)) +
+     geom_point() +
+     geom_abline() +
+     xlab("Log(Observed)") +
+     ylab("Log(Predicted)")
+
+
+
+ })
+ 
+ #creates a new reactive dataframe
+ 
+ outcome_all <- reactive({
+   
+   XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
+   
+   train_data() %>% 
+     select(two_week_forecast_date, two_week_outcome) %>%
+     rename(Date = two_week_forecast_date,
+            Outcome = two_week_outcome) %>% 
+     mutate (Pred_vs_Obs = "Observed") %>% 
+     rbind(tibble(Date = preds_data()$two_week_forecast_date,
+                  Outcome = XGBPredsPred,
+                  Pred_vs_Obs = "Predicted"))
+   
+   
+ })
+ 
+ 
+ 
+   
+ 
+ 
+#plots the resulting predictions
+ output$all_predictions <- renderPlot({
+   
+    outcome_all() %>% 
+   
+      ggplot(aes(x = Date, y = Outcome)) +
+     
+       geom_point(aes(color = Pred_vs_Obs)) 
+   
+   
+ })
+ 
+ 
+
+ createPredState <- function(forecast_data, state) {
+
+   latest_date = max(forecast_data$Date)
+   pred_state = forecast_data[forecast_data$two_week_forecast_date > latest_date, ] %>%
+     filter(State == state)
+
+ }
+ 
+ 
+ #create a new reactive dataframe for the desired predictions for a given state
+pred_state <- reactive({
+  
+  createPredState(forecast_data(), input$state)
+  
+})
+
+
+outcome_state <- reactive({
+  
+  XGBModel_state <- XGBpredictions(xgb_model_output(), pred_state())
+  
+    train_data() %>% 
+    filter(State == input$state) %>% 
+    select(two_week_forecast_date, two_week_outcome) %>%
+    rename(Date = two_week_forecast_date,
+           Outcome = two_week_outcome) %>% 
+    mutate (Pred_vs_Obs = "Observed") %>% 
+    rbind(tibble(Date = pred_state()$two_week_forecast_date,
+                 Outcome = XGBModel_state,
+                 Pred_vs_Obs = "Predicted"))
+
+})
+
+ 
+output$one_state_preds <- renderPlot({
+  
+  outcome_state() %>% 
+    
+    ggplot(aes(x = Date, y = Outcome)) +
+    
+    geom_point(aes(color = Pred_vs_Obs)) +
+    
+    stat_smooth(method = 'lm', formula = y ~ poly(x,10), se = TRUE, color = "darkgrey")
+    
   
   
   
-  
+})
+
+ 
 }
 
 # Run the application 
