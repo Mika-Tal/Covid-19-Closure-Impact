@@ -20,7 +20,7 @@ loadlibs(libs)
 ```
 
 ```{r}
-setwd("~/GitHub/Covid-19-Closure-Impact/Data")
+setwd("~/GitHub/Covid-19-Closure-Impact")
 
 #df<-read.csv('Covid_Pred.csv')
 
@@ -187,7 +187,6 @@ typeof(features1$two_week_prior)
 
 
 ###CV Glmnet 
-
 
 ```{r}
 ##Train/Test split 
