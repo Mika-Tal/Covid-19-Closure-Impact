@@ -20,12 +20,46 @@ loadlibs(libs)
 ```
 
 ```{r}
-setwd("~/GitHub/Covid-19-Closure-Impact/Data")
+setwd("~/GitHub/Covid-19-Closure-Impact")
 
 #df<-read.csv('Covid_Pred.csv')
 
 df<- read.csv('shiny_merged_dataset_example.csv')
+  names(df) <-tolower(names(df))
+  
+colnames(df)[which(names(df) == "covid_measure")] <- "y"
+  
+  drops<-c( "x") #droping 
+df <-df[, -which(names(df) %in% drops)]
+  
+ df<- df%>%
+  mutate_at(c('date'), ~ as.Date(., "%Y-%m-%d")) %>% 
+  mutate(two_week_forecast_date = date + 14)%>% 
+  mutate_if(is.character, as.factor)
 
+  
+  # Get latest date 
+latest_date = max(df$date)
+#Two week outcome 
+twoWeek_df = df %>% 
+  select(date, state, y) %>% 
+  rename(two_week_outcome = y,
+         two_week_forecast_date = date) 
+#Merge with original to create a working df
+working_df = df %>% 
+  left_join(twoWeek_df,
+            by = c("state" = "state",
+                   "two_week_forecast_date" = "two_week_forecast_date")) %>% 
+  mutate(year = as.factor(year(two_week_forecast_date)),
+         week = as.factor(week(two_week_forecast_date)))
+
+
+
+working_df[is.na(working_df)] <-0
+
+#y = covid_measure
+colnames(working_df)[which(names(working_df) == "y")] <- "two_week_backcast"
+colnames(working_df)[which(names(working_df) == "two_week_outcome")] <- "y"
 
 #names(df)[names(df) == "Outcome.Variable"] <- "original_y" #creating consitency 
 #names(df)[names(df) == "Other"] <- "Other_Race"  #"Other is not meaningful in output
@@ -34,14 +68,16 @@ df<- read.csv('shiny_merged_dataset_example.csv')
 
 
 
+#datacleaning for randomforest 
+
 ```{r}
 
-
-drops<-c( "year", "week","week_first_date", "two_week_forecast_date") #droping 
-df <-df[, -which(names(df) %in% drops)]
+#let Tobi know what gets kept 
+drops<-c( "year", "week", "two_week_forecast_date") #droping 
+working_df <-working_df[, -which(names(working_df) %in% drops)]
 ##Moving Ouctome Variable to front of dataset for ease of splitting
-col_idx <- grep("^y$", names(df))
-df <- df[, c(col_idx, (1:ncol(df))[-col_idx])]
+col_idx <- grep("^y$", names(working_df))
+working_df<- working_df[, c(col_idx, (1:ncol(working_df))[-col_idx])]
 
 
 
@@ -49,9 +85,9 @@ df <- df[, c(col_idx, (1:ncol(df))[-col_idx])]
 ##Split
 ```{r}
 
-end<-ncol(df)
-x <- df[,2:end]
-y <- df[,1]
+end<-ncol(working_df)
+x <- working_df[,2:end]
+y <- working_df[,1]
 
 #Removing Y from the tuning paratmers 
 
@@ -66,47 +102,25 @@ set.seed(10)
 bestmtry <- tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500)
 print(bestmtry)
 
-bestmtry_var<- bestmtry[1,1].0
+bestmtry_var<- bestmtry[1,1]
 
 ```
-
-#df1 = df %>%
- # mutate_if(is.character, as.factor) #%>% 
-  #mutate_if(is.factor, forcats::fct_lump_min, min=100) 
-#df1$new_cases<- as.factor(df1$new_cases)
-
-
-t<- as.numeric(count(df)*.75)
-
-set.seed(12345) 
-df2 = df[sample(1:nrow(df)),]
-train = df2[1:t,]
-test = df2[-(1:t),]
-
-
-
-
-control <- trainControl(method="repeatedcv", number=10, repeats=3, search="grid")
-set.seed(seed)
-tunegrid <- expand.grid(.mtry=c(1:15))
-rf_gridsearch <- train(Class~., data=dataset, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control)
-print(rf_gridsearch)
-plot(rf_gridsearch)
- 
-
 
 
 ```{r}
 
 rf <- randomForest(y ~ ., mtry= bestmtry_var, 
-  data=df
+  data=working_df
 )
+
+#change to GGplot 
+rf$importance
 
 varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
            type=NULL, class=NULL, scale=TRUE, 
            main=deparse(substitute(rf))) 
 
-### GAMS
+### GLM
 features <- as.data.frame(rf$importance)
 features <-as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity"))) 
 
@@ -116,10 +130,11 @@ top<- top_n(features, 10, features$NodPurity)
 #one<- as.character(top[1,1])
 top_f<-as.vector(top$Feature)
 
-new<-df%>%
+
+new<-working_df%>%
 select(one_of(c(top_f)))
 
-new$y<-df$y
+new$y<-working_df$y
 
 
 
@@ -135,10 +150,10 @@ new$y<-df$y
 Process needed to create 2D for 'state' to be incorporated into GLM with poly option 
 
 
-
+#Geotagging for glmnet
 ```{r}
 
-setwd("~/GitHub/Covid-19-Closure-Impact/Data")
+#setwd("~/GitHub/Covid-19-Closure-Impact/Data")
 
 geo<- read.csv('us-zip-code-latitude-and-longitude.csv', header= FALSE, stringsAsFactors = FALSE)
 
@@ -151,26 +166,27 @@ geo<- geo[-1,]
 geo$Latitude<-as.numeric(geo$Latitude)
 geo$Longitude<-as.numeric(geo$Longitude)
 
+names(geo) <-tolower(names(geo))
+  
 state_latLong <- geo%>%
-  group_by(State)%>%
-  summarise(Latitude = mean(Latitude, na.rm = TRUE),
-            Longitude = mean(Longitude, na.rm = TRUE))
-
+  group_by(state)%>%
+  summarise(latitude = mean(latitude, na.rm = TRUE),
+            longitude = mean(longitude, na.rm = TRUE))
 
 ```
 
 #Joining Long/Lat data and selected features
 ```{r}
 # this step should be moved to data cleaning, ask if their data is by state or county, county can be a direct match to the original dataset 
-features<- left_join(new, state_latLong, by='State')
-id<-rownames(features)
-features<-cbind(id=id, features)
-
+features<- left_join(new, state_latLong, by='state')
+#id<-rownames(features)
+#features<-cbind(id=id, features)
 
 ```
 
 ```{r}
-features1<-features[, -which(names(features) %in% c("State"))]
+features1<-features[, -which(names(features) %in% c("state"))]#%>% 
+  #select(-1) #removing 'id'
 
 ##need to undo this at the end
 
@@ -178,35 +194,43 @@ col_idx <- grep("^y$", names(features1))
 features1 <- features1[, c(col_idx, (1:ncol(features1))[-col_idx])]
 head(features1)
 
+#dropping date, cannot create a poly w/ cbind() after polys created
+date_hold<- as.data.frame(features1$date)
+#two_week_forecast_date<-as.data.frame(features1$two_week_forecast_date)
+drops<-c( "date") #droping 
+features1<-features1[, -which(names(features1) %in% drops)]
+
  feat_v2 <- function(df, column_numbers) {
 
-  df %>% 
+   df %>% 
     mutate_at(vars(column_numbers), funs(sqr = (.)^2))%>%
    mutate_at(vars(column_numbers), funs(cube =(.)^3))
 }
 
+
  
-glm_feats<-feat_v2(features1, 3:13) #do not include y or "id" in poly calcs
+end<-ncol(features1)
 
-one<- as.character(top[1,1])
+#, two_week_forecast_date
+glm_feats<-cbind(feat_v2(features1, 2:end), date_hold) #do not include y or "id" in poly calcs
 
-typeof(features1$two_week_prior)
+#one<- as.character(top[1,1])
+
+#typeof(features1$two_week_prior)
 
 ```
 
 
 ###CV Glmnet 
 
-
 ```{r}
 ##Train/Test split 
 n<-glm_feats%>% count() 
 n<-as.numeric(n/2)
-data2= features1[sample(1:nrow(glm_feats)),]  # permute rows
+data2 = glm_feats[sample(1:nrow(glm_feats)),]  # permute rows
 
 datatrain = data2[(1:n),]
 datatest = data2[-(1:n),]
-
 
 
 ```
@@ -215,9 +239,11 @@ datatest = data2[-(1:n),]
 ##Glmnet 
 ```{r}
 
+datatrain[is.na(datatrain)] <-0
+
 train_glm<- cv.glmnet(
-  x = datatrain %>% select(-y, -id) %>% as.matrix(),
-  y = datatrain$y, relax= FALSE)
+  x = datatrain %>% select(-y) %>% as.matrix(),
+  y = datatrain$y %>% as.matrix(), relax = FALSE)
 
 i <- which(train_glm$lambda == train_glm$lambda.min)
 mse.min <- train_glm$cvm[i]
@@ -230,7 +256,6 @@ combo<-combo%>%
   rename(Preds='1', 
          Original = V2)
 
-
 ```
 
 ```{r}
@@ -239,9 +264,9 @@ plot(glm_preds)
 plot(glm_preds,xvar="lambda",label=TRUE)
 
 ```
+
+
 ```{r}
-
-
 
 plot(combo)
 
@@ -256,6 +281,29 @@ ggplot(combo, aes(x=Error_abs)) + geom_boxplot()
 ggplot(combo, aes(x=MSE)) + geom_boxplot()
 
 ```
+
+
+#df1 = df %>%
+# mutate_if(is.character, as.factor) #%>% 
+#mutate_if(is.factor, forcats::fct_lump_min, min=100) 
+#df1$new_cases<- as.factor(df1$new_cases)
+
+t<- as.numeric(count(df)*.75)
+
+set.seed(12345) 
+df2 = df[sample(1:nrow(df)),]
+train = df2[1:t,]
+test = df2[-(1:t),]
+
+
+control <- trainControl(method="repeatedcv", number=10, repeats=3, search="grid")
+set.seed(seed)
+tunegrid <- expand.grid(.mtry=c(1:15))
+rf_gridsearch <- train(Class~., data=dataset, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control)
+print(rf_gridsearch)
+plot(rf_gridsearch)
+ 
+
 
 ####GAM not used
 
@@ -277,8 +325,6 @@ ob_v_pred_test_plot = ggplot(combo, aes(x = Preds, y = Original)) +
 
 
 ob_v_pred_test_plot #way over estimating 
-```
-
 
 
 
