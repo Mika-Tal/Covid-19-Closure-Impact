@@ -128,7 +128,9 @@ datatrain<-train_df(working_df)
 datatest<-test_df(working_df)
 datapreds<- pred_df(working_df)
 
-drops<-c( "year", "week", "two_week_forecast_date")
+drops<-c("year","week","two_week_forecast_date")
+
+#datatest$two_week_forecast_date
 datatrain <-datatrain[, -which(names(datatrain) %in% drops)]
 datatest <- datatest[, -which(names(datatest) %in% drops)]
 datapreds <- datapreds[, -which(names(datapreds) %in% drops)]
@@ -174,21 +176,30 @@ bestmtry_var<- bestmtry[1,1]
 
 ```{r}
 
-r.forest <- (df){
+r.forest <- function(working_df){
   rf <- randomForest(y ~ ., mtry= bestmtry_var, 
-  data=df)
+  data=working_df)
 
   varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
            type=NULL, class=NULL, scale=TRUE, 
            main=deparse(substitute(rf))) 
+  
   features <- as.data.frame(rf$importance)
   features <-as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity"))) 
   top<- top_n(features, 10, features$NodPurity)
   top_f<-as.vector(top$Feature)
 
-  df%>%
-  select(one_of(c(top_f)))
-  new$y<-working_df$y
+  return(top_f)
+}
+ 
+
+
+
+rf.tops <-function(sample_df, top_f){
+  new<-sample_df%>%
+  select(all_of(c(top_f)))
+  
+  new$y<-sample_df$y
 
   return(new)
 
@@ -199,9 +210,12 @@ r.forest <- (df){
 ```
 
 ```{r}
-datatrain<-r.forest(datatrain)
-datatest<-r.forest(datatest)
-datapreds<- r.forest(datapreds)
+
+tops <-r.forest(working_df)
+
+datatrain<-rf.tops(datatrain, tops)
+datatest<-rf.tops(datatest,tops)
+datapreds<- rf.tops(datapreds,tops)
 
 ```
 
@@ -301,15 +315,14 @@ library(DAAG)
 
 #x_test<- model.matrix(~., -1 datatrain[, 1])
 
-train_cvlm<- cv.lm(data=datatrain, form.lm = formula(y~.))
+train_cvlm<- CVlm(data=datatrain_lm, form.lm = formula(y~.))
 
-
-
+predict(train_cvlm, newx = datatest_lm %>% select(-y, -id)%>% as.matrix(), newy= datatest_lm$y)
 
 ```
 
 ##Linear features only
-```{r}
+
 features2<-features[, -which(names(features) %in% c("state"))]
 
 n<-features2%>% count() 
@@ -319,23 +332,27 @@ data3 = features2[sample(1:nrow(features2)),]  # permute rows
 datatrain2 = data3[(1:n),]
 datatest2 = data3[-(1:n),]
 
-```
-##Glmnet (linear only)
+
+##Glmnet 
 ```{r}
+
+
 train_glm<- cv.glmnet(
-  x = datatrain %>% select(-y) %>% as.matrix(),
-  y = datatrain$y %>% as.matrix(), relax = FALSE, standardize = FALSE, normalize=FALSE, winsfrac=0 )
+  x = datatrain_lm %>% select(-y) %>% as.matrix(),
+  y = datatrain_lm$y %>% as.matrix(), relax = FALSE, standardize = FALSE, normalize=FALSE, winsfrac=0)
 
 i <- which(train_glm$lambda == train_glm$lambda.min)
 mse.min <- train_glm$cvm[i]
 
 
-glm_preds <-predict(train_glm, newx = datatest2 %>% select(-y, -id)%>% as.matrix(), newy= datatest$y)
+glm_test <-predict(train_glm, newx = datatest_lm %>% select(-y)%>% as.matrix(), newy= datatest_lm$y)
 
-combo<- as.data.frame(cbind(glm_preds, datatest2$y))
-combo<-combo%>%
-  rename(Preds='1', 
-         Original = V2)
+glm_preds <-predict(train_glm, newx = datapreds_lm %>% select(-y)%>% as.matrix(), newy= datapreds_lm$y)
+
+#combo<- as.data.frame(cbind(glm_preds, datatest2$y))
+#combo<-combo%>%
+#  rename(Preds='1', 
+ #        Original = V2)
 
 ```
 
@@ -384,7 +401,6 @@ rf_gridsearch <- train(Class~., data=dataset, method="rf", metric=metric, tuneGr
 print(rf_gridsearch)
 plot(rf_gridsearch)
  
-
 
 ####GAM not used
 
