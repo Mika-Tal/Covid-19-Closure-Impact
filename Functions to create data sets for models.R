@@ -22,7 +22,7 @@ twoWeek_df = df %>%
 working_df = df %>% 
   left_join(twoWeek_df,
             by = c("State" = "State",
-                   "two_week_forecast_date" = "two_week_forecast_date"))
+                   "two_week_forecast_date" = "two_week_forecast_date")) 
 
 return(working_df)
 }
@@ -59,7 +59,7 @@ pred_df = function(addForecastCols, df) {
   #create variable for latest date for which two week covid measure is avaiable
   latest_date = max(df$Date)
   #Create a prediction set - using the  two weeks for which two_week_outcom is not observed. 
-  pred = df[df$two_week_forecast_date > latest_date, ]
+  pred = df[df$two_week_forecast_date > latest_date +7, ]
   return(pred)
 }
 
@@ -70,8 +70,19 @@ pred_state_df = function(addForecastCols, df, state) {
   #create variable for latest date for which two week covid measure is avaiable
   latest_date = max(df$Date)
   #Create a prediction set - using the  two weeks for which two_week_outcom is not observed. 
-  pred_state = df[df$two_week_forecast_date > latest_date, ] %>% filter(State == state)
+  pred_state = df[df$two_week_forecast_date > latest_date +7, ] %>% filter(State == state)
   return(pred_state)
+}
+
+
+#Get Baseline RMSE off test set average
+baselineRMSE = function (test, RMSE){ 
+  baseline = test %>%  
+    select(two_week_outcome) %>% 
+    mutate(average_outcome = mean(two_week_outcome)) 
+  
+  baselineRMSE = sqrt(mean (
+    (baseline$two_week_outcome - baseline$average_outcome) ^ 2 ) )
 }
 
 #Convert data frame into dense matrix for XGB model
@@ -124,7 +135,8 @@ return(XGBModel)
 
 #Get best model parameters
 BestFit = function(XGBModel){
-  XGBModel$bestTune
+  BestFit = XGBModel$bestTune %>% 
+    stargazer(type = 'text', summary = FALSE)
 }
 
 #Get predctions based on XGB mmodel
@@ -147,7 +159,7 @@ RMSE = function(test, predictions){
 }
 
 #Plot observed vs. predicted
-obs_vs_pred_plot = function(test, predicted){ 
+obs_vs_pred_plot = function(test, predicted, baselineRMSE){ 
   #Create dataframe
   obs_vs_pred = test %>% 
     select(two_week_outcome) %>% 
@@ -158,9 +170,12 @@ obs_vs_pred_plot = function(test, predicted){
   
   obs_vs_pred_plot = ggplot(obs_vs_pred, aes(x = Observed, y = Predicted)) +
     geom_point() +
-    geom_abline() +
+    geom_abline(aes(intercept = 0, slope = 1, color = "blue")) +
+    geom_line(aes(y = log(baselineRMSE(test)), color = "red")) +
     xlab("Log(Observed)") +
-    ylab("Log(Predicted)")
+    ylab("Log(Predicted)") +
+    scale_colour_manual(name = "Color", values =c('blue'='blue','red'='red'),
+                        labels = c('45-degree','Test Set Avergae'))
 }
 
 #Plot predictions - all states
@@ -180,14 +195,16 @@ predictions_all_plot = function(train, pred, XGBPredsPred){
 }
 
 #Predictions in tabular form
-predictions_tabular = function(XGBPredsPred){
-  #Create week labels column
-  Week = rep("Week_1", 51) %>% c(rep("Week_2", 51))
+results_tabular_all = function(XGBPredsPred, test, XGBRMSE, BLRMSE){
   #Summarise predictions by prediction week
-  preds_all = data.frame(Prediction  = XGBPredsPred, Week = Week) %>%
-    group_by(Week) %>% 
+  Results = data.frame(Prediction = test$two_week_outcome,
+                 Model = rep("Baseline", nrow(test))) %>% 
+    bind_rows(data.frame(Prediction  = XGBPredsPred,
+                         Model = rep("XGB", length(XGBPredsPred)))) %>% 
+    group_by(Model) %>% 
     summarise(Total = sum(Prediction),
-              Average = mean(Prediction)) %>% 
+              AvgPerState = mean(Prediction)) %>% 
+    mutate(RMSE = c(BLRMSE, XGBRMSE)) %>% 
     stargazer(type = 'text', summary = FALSE)
     
 }
@@ -210,10 +227,7 @@ predictions_by_state = function(train, state, pred_state, XGBPredsState){
 
 #Predictions in tabular form for selected state
 predictions_state_tabular = function(XGBPredsState){
-  #Create week labels column
-  Week = c("Week_1", "Week_2")
-  #Summarise predictions by prediction week
-  preds_state = data.frame(Week = Week,Prediction  = XGBPredsState) %>%
+  preds_state = data.frame(XGB = XGBPredsState) %>%
     stargazer(type = 'text', summary = FALSE)
   
 }
@@ -236,21 +250,21 @@ XGBModel = XGBModel(train)
 BestFit(XGBModel)
 #Get test set predictions and save to variable
 XGBPredsTest = XGBpredictions(XGBModel,test)
-#Calculate RMSE - no need to save to variable
-RMSE(test, XGBPredsTest)
-#plot observed vs predicted (log scale) - no need to save to variable
-obs_vs_pred_plot(test, XGBPredsTest)
+#Calculate XGB RMSE - save to variable 
+XGBRMSE = RMSE(test, XGBPredsTest)
+#plot observed vs predicted (log scale). Save to variable 
+obs_vs_pred_plot(test, XGBPredsTest, baselineRMSE)
 #Get pred set predictions - all states. Save to variable
 XGBPredsPred = XGBpredictions(XGBModel,pred)
 #Plot predictions all states - no need to save to variable
 predictions_all_plot(train,pred,XGBPredsPred)
-#Prediction summary table by week - no need to save to variable
-predictions_tabular(XGBPredsPred)
 #Get pred set predictions - by state. Save to variable
 XGBPredsState = XGBpredictions(XGBModel,pred_state)
 #Plot predictions all states - no need to save to variable
 predictions_by_state(train, 'MA', pred_state, XGBPredsState)
 #Prediction summary table by selected state - no need to save to variable
 predictions_state_tabular(XGBPredsState)
-
-
+#baseline RMSE - based on test average. Save to Variable
+BLRMSE = baselineRMSE(test)
+#Results table
+results_tabular_all(XGBPredsPred, test, XGBRMSE, BLRMSE)
