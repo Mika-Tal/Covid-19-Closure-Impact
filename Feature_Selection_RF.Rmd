@@ -301,154 +301,59 @@ return(cbind(feats(df1, 2:end), date_hold)) #do not include y or "id" in poly ca
 ```
 
 ```{r}
-datatrain_lm<- cleaning_lm(datatrain_lm)
-datatest_lm<- cleaning_lm(datatest_lm)
-datapreds_lm<-cleaning_lm(datapreds_lm)
+datatrain_poly<- cleaning_lm(datatrain_lm)
+datatest_poly<- cleaning_lm(datatest_lm)
+datapreds_poly<-cleaning_lm(datapreds_lm)
 
 ```
-## CV.lm (with poly )
-```{r}
-#install.packages('DAAG')
-library(DAAG)
-
-#datatrain[is.na(datatrain)] <-0
-
-#x_test<- model.matrix(~., -1 datatrain[, 1])
-
-train_cvlm<- CVlm(data=datatrain_lm, form.lm = formula(y~.))
-
-predict(train_cvlm, newx = datatest_lm %>% select(-y, -id)%>% as.matrix(), newy= datatest_lm$y)
-
-```
-
-##Linear features only
-
-features2<-features[, -which(names(features) %in% c("state"))]
-
-n<-features2%>% count() 
-n<-as.numeric(n/2)
-data3 = features2[sample(1:nrow(features2)),]  # permute rows
-
-datatrain2 = data3[(1:n),]
-datatest2 = data3[-(1:n),]
 
 
 ##Glmnet 
 ```{r}
 
+datatrain_glmnet<- datatrain_poly %>%
+mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
+model.matrix(object= ~ .-1, . , contrasts.arg =
+                                                 lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
+                                                        contrasts, contrasts = FALSE))
 
-train_glm<- cv.glmnet(
-  x = datatrain_lm %>% select(-y) %>% as.matrix(),
-  y = datatrain_lm$y %>% as.matrix(), relax = FALSE, standardize = FALSE, normalize=FALSE, winsfrac=0)
+datatest_glmnet<- datatest_poly %>%
+mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
+model.matrix(object= ~ .-1, . , contrasts.arg =
+                                                                lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
+                                                        contrasts, contrasts = FALSE))
 
-i <- which(train_glm$lambda == train_glm$lambda.min)
-mse.min <- train_glm$cvm[i]
+datapreds_glmnet<- datapreds_poly%>%
+mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
+model.matrix(object= ~ .-1, . , contrasts.arg =
+                                                                lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
+                                                        contrasts, contrasts = FALSE))
 
 
-glm_test <-predict(train_glm, newx = datatest_lm %>% select(-y)%>% as.matrix(), newy= datatest_lm$y)
 
-glm_preds <-predict(train_glm, newx = datapreds_lm %>% select(-y)%>% as.matrix(), newy= datapreds_lm$y)
+train_glm<- glmnet(
+  x = datatrain_glmnet[,-1],
+  y = datatrain_glmnet[,1], relax = FALSE, nfolds= 3)
 
-#combo<- as.data.frame(cbind(glm_preds, datatest2$y))
-#combo<-combo%>%
-#  rename(Preds='1', 
- #        Original = V2)
 
+plot(train_glm)
+
+lamMin<- min(train_glm[["lambda"]])
+
+test<-predict(train_glm, newx= datatest_glmnet[,-1], newy=datatest_glmnet[,1], s = lamMin , interval="confidence")
+
+preds<- predict(train_glm, newx= datapreds_glmnet[,-1], newy=datapreds_glmnet[,1], s = lamMin , interval="confidence")
 ```
-
+#RMSE testing 
 ```{r}
 
-plot(glm_preds)
-plot(glm_preds,xvar="lambda",label=TRUE)
+test<- as.data.frame(test) 
+glm_test<- as.data.frame(datatest_glmnet)
+preds_act<- cbind(test, glm_test$y)
+
+
+RMSE_glm<- sqrt(mean(preds_act[,2]-preds_act[,1])^2)
+
+
 
 ```
-
-
-```{r}
-
-plot(combo)
-
-combo$Error_abs <-100*abs(combo$Original - combo$Preds)/combo$Original
-
-combo$MSE<-(combo$Original - combo$Preds)^2 
-
-mean(combo$MSE)
-mean(combo$Error_abs)
-
-ggplot(combo, aes(x=Error_abs)) + geom_boxplot()
-ggplot(combo, aes(x=MSE)) + geom_boxplot()
-
-```
-
-
-#df1 = df %>%
-# mutate_if(is.character, as.factor) #%>% 
-#mutate_if(is.factor, forcats::fct_lump_min, min=100) 
-#df1$new_cases<- as.factor(df1$new_cases)
-
-t<- as.numeric(count(df)*.75)
-
-set.seed(12345) 
-df2 = df[sample(1:nrow(df)),]
-train = df2[1:t,]
-test = df2[-(1:t),]
-
-
-control <- trainControl(method="repeatedcv", number=10, repeats=3, search="grid")
-set.seed(seed)
-tunegrid <- expand.grid(.mtry=c(1:15))
-rf_gridsearch <- train(Class~., data=dataset, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control)
-print(rf_gridsearch)
-plot(rf_gridsearch)
- 
-
-####GAM not used
-
-#Week and state and year
-
-gam_mod<-gam(y ~ s(new[,1])+ s(new[,5])+ s(new[,6])+ s(new[,7]) + s(new[,8])+s(new[,4]), data=new)
-
-summary(gam_mod)
-vis.gam(gam_mod)
-
-futureVal <-predict(gam_mod, n.ahead = 2)
-#https://m-clark.github.io/generalized-additive-models/application.html#multiple-predictors
-#pruning random forest 
-
-
-ob_v_pred_test_plot = ggplot(combo, aes(x = Preds, y = Original)) +
-  geom_point() +
-  geom_abline()
-
-
-ob_v_pred_test_plot #way over estimating 
-
-
-
-# https://gist.github.com/gunthergl/bc1202b93b672e384c77da9b3769b91d was not able to implement this graphics
-
-##GAM Viz
-
-futureVal <-predict(gam_mod, n.ahead = 2) 
-
-pred_week <- df$Week
-
-preddata = data.frame(Week = seq(.4, 1, length = 100),
-                      Edu = mean(mod_gam2$model$Edu),
-                      Health = mean(mod_gam2$model$Health))
-
-futureVal <-predict(fit, n.ahead = 168)
-
-fits = predict(mod_gam2, newdata=testdata, type='response', se=T)
-predicts = data.frame(testdata, fits) %>% 
-  mutate(lower = fit - 1.96*se.fit,
-         upper = fit + 1.96*se.fit)
-
-plot_mod_gam2_response = ggplot(aes(x=Income,y=fit), data=predicts) +
-  geom_ribbon(aes(ymin = lower, ymax=upper), fill='gray90') +
-  geom_line(color='#00aaff') +
-  theme_trueMinimal()
-
-
-
-
