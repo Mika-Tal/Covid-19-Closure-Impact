@@ -2,7 +2,9 @@
 title: "Feature_Select_RF"
 author: "ClareCallahan"
 date: "4/17/2021"
-output: html_document
+output:
+  html_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -184,9 +186,9 @@ r.forest <- function(working_df){
   rf <- randomForest(y ~ ., mtry= bestmtry_var, 
   data=working_df)
 
-  varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
-           type=NULL, class=NULL, scale=TRUE, 
-           main=deparse(substitute(rf))) 
+  #varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
+          # type=NULL, class=NULL, scale=TRUE, 
+         #  main=deparse(substitute(rf))) 
   
   features <- as.data.frame(rf$importance)
   features <-as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity"))) 
@@ -216,9 +218,9 @@ rf.tops <-function(sample_df, top_f){
 tops <-r.forest(working_df)
 
 
-  varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
-           type=NULL, class=NULL, scale=TRUE, 
-           main=deparse(substitute(rf))) 
+ # varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
+  #         type=NULL, class=NULL, scale=TRUE, 
+   #        main=deparse(substitute(rf))) 
   
 ```
 
@@ -360,14 +362,14 @@ preds<- predict(train_glm, newx= datapreds_glmnet[,-1], newy=datapreds_glmnet[,1
 
 test<- as.data.frame(test) 
 glm_test<- as.data.frame(datatest_glmnet)
-
 preds_act<- cbind(test, glm_test$y)
 RMSE_glm<- sqrt(mean(preds_act[,2]-preds_act[,1])^2)
+
 preds_act$Observed<- preds_act[,1]
 preds_act$Predicted<- preds_act[,2]
 preds_act$two_week_forecast_date <- datapreds$two_week_forecast_date
 
-final_preds<- cbind(preds, datapreds_geo)
+final_preds<- cbind(preds, datapreds_lm)
 final_preds$Predicted<- final_preds[,1]
 
 ```
@@ -453,13 +455,10 @@ obs_vs_pred_plot
 #Residual Density plot
 ```{r}
 
-#reds<- as.data.frame(preds_act$Predicted-preds_act$Observed)
+reds<- as.data.frame(preds_act$Predicted-preds_act$Observed)
 
-    GLMResids = datatest_poly %>% 
-      select(two_week_backcast, y) %>% 
-      rename(Observed = y) %>% 
+    GLMResids = preds_act %>% 
       mutate(Model = "GLM") %>% 
-      bind_cols(tibble(Predicted = preds_act$Predicted)) %>% 
       mutate(Residuals = Predicted - Observed) %>% 
       select(Residuals, Model)
     #df for baseline residuals
