@@ -1,0 +1,102 @@
+---
+title: "GAMs"
+author: "ClareCallahan"
+date: "4/7/2021"
+output: html_document
+---
+
+```{r}
+loadlibs = function(libs) {
+  for(lib in libs) {
+    class(lib)
+    if(!do.call(require,as.list(lib))) {install.packages(lib)}
+    do.call(require,as.list(lib))
+  }
+}
+libs = c("tidyverse","data.table","stargazer", "knitr", "shiny",
+         "tidymodels", "lubridate", "rpart.plot", "caret", "e1071",
+         "readxl", "fuzzyjoin", "mgcv")
+loadlibs(libs)
+
+```
+
+
+```{r setup, include=FALSE}
+setwd("~/GitHub/Covid-19-Closure-Impact/Data")
+
+df<-read.csv('Covid_Pred.csv')
+
+df$submission_date<- as.Date(as.character(df$submission_date), format="%m/%d/%Y")
+
+df%>% 
+  group_by(state)%>%
+  group_by(year = year(submission_date), week = week(submission_date )) %>% 
+  summarise_if(is.numeric, sum)
+
+```
+
+
+```{r}
+
+plot
+gam_mod<-gam(new_cases ~ s(Population_density), data=df)
+gam_mod<-gam(new_cases~ . , data=df)
+
+plot(gam_mod, residuals = TRUE, pch = 1)
+```
+## random forest
+```{r}
+df1 = df %>%
+  mutate_if(is.character, as.factor) %>% 
+  mutate_if(is.factor, forcats::fct_lump_min, min=100) 
+df1$new_cases<- as.factor(df1$new_cases)
+
+t<- as.numeric(count(df)*.75)
+```
+
+##GAM
+```{r}
+#Week and state and year
+
+#max out at 6 predictors
+
+#gam_mod<-gam(y ~ new[,1]+ new[,2]+ new[,7]+ new[,8]) + new[,9])
+gam(y ~ new[,1]+new[,2])
+
+## grid search hold out... cv.glment auto does validation process 
+
+gam_mod<-gam(y ~ s(new[,1])+ s(new[,2])+ s(new[,7])+ s(new[,8]) + s(new[,9])+s(new[,10]), data=new, knots = 2)
+
+summary(gam_mod)
+vis.gam(gam_mod)
+
+set.seed(12345)  # set random number seed to get same result each time script is run
+df2 = df1[sample(1:nrow(df1)),]
+dfTrain = df2[1:t,]
+dfTest = df2[-(1:t),]
+### Decision tree ###
+tree= decision_tree(mode="classification") %>%
+  set_engine("rpart") %>%
+  fit(new_cases ~ ., dfTrain) 
+
+pred <-predict(tree, new_data=dfTest)  # Predict category
+table(pred)
+
+prp(tree$fit, extra=1, branch.type=5)
+```
+
+
+#https://m-clark.github.io/generalized-additive-models/application.html#multiple-predictors
+#pruning random forest 
+
+#https://towardsdatascience.com/random-forest-in-r-f66adf80ec9
+```
+#
+
+
+##Glmnet
+https://cran.r-project.org/web/packages/plsmselect/vignettes/plsmselect.html
+```{r}
+cv.glm
+
+```

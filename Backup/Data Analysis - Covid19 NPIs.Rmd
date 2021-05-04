@@ -1,0 +1,280 @@
+#Analysis for Random Forest and XGBoost
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+#install.packages("xgboost")
+loadlibs = function(libs) {
+  for(lib in libs) {
+    class(lib)
+    if(!do.call(require,as.list(lib))) {install.packages(lib)}
+    do.call(require,as.list(lib))
+  }
+}
+libs = c("tidyverse","data.table","stargazer", "caret", "e1071",
+         "randomForest", "C50", "xgboost", "ggplot2", "cowplot")
+loadlibs(libs)
+```
+
+## Load Data Set
+
+```{r}
+#Load dataset
+working_df = read.csv("working_14days.csv") %>% 
+  filter(submission_date >= as.Date("2020-03-01") & submission_date < as.Date("2020-05-01"))
+
+#Covid deaths outcome variable df
+cases_df = working_df %>% 
+  select(new_cases_per_100k, submission_date, state, c(85:92) )
+#Check  the df structure
+str(cases_df)
+#Convert the policy indicators to factors:
+cases_df = cases_df %>% 
+  mutate_if(is.integer, as.factor)
+```
+
+```{r}
+#Load dataset
+working_df_long = read.csv("working_14days.csv") %>% 
+  filter(submission_date >= as.Date("2020-03-01") & submission_date < as.Date("2021-01-01"))
+
+#Covid deaths outcome variable df
+cases_df_long = working_df_long %>% 
+  select(new_cases_per_100k, submission_date, state, c(85:92) )
+#Check  the df structure
+str(cases_df_long)
+#Convert the policy indicators to factors:
+cases_df_long = cases_df_long %>% 
+  mutate_if(is.integer, as.factor)
+```
+## Control Merges
+1. Can we simplify the age distribution? maybe just proportion over 60? 
+2. Race - how do we want to incorporate? proportion minorities? 
+3. Need to add median income
+4. I think We discussed using population density instead of population?
+5. Not sure we gender is going to give us much. Maybe remove? 
+6. We should add some sort of health indicators - Ahmed might have something in mind? otherwise we can use 
+7. Date ranges we want to use? 
+
+## Split and prepare train/test datasets
+
+```{r}
+set.seed(1)
+#generate random index list for training and test sets
+trainIndex = sample(1:nrow(cases_df), 0.8 * nrow(cases_df))
+#create train set 
+trainCases = cases_df[trainIndex, ]
+#create test set
+testCases = cases_df[-c(trainIndex), ]
+```
+
+```{r}
+set.seed(1)
+#generate random index list for training and test sets
+trainIndex_long = sample(1:nrow(cases_df_long), 0.8 * nrow(cases_df_long))
+#create train set 
+trainCases_long = cases_df_long[trainIndex_long, ]
+#create test set
+testCases_long = cases_df_long[-c(trainIndex_long), ]
+```
+
+```{r}
+# convert features to matrix - with date 
+trainMTX=model.matrix(new_cases_per_100k~., trainCases)[, -1]
+testMTX=model.matrix(new_cases_per_100k~., testCases)[, -1]
+
+#Convert features to matric -w/o date
+trainMTX_policiesOnly = model.matrix(new_cases_per_100k~. -submission_date -state, trainCases)[, -1]
+testMTX_policiesOnly = model.matrix(new_cases_per_100k~. -submission_date -state, testCases)[, -1]
+```
+
+```{r}
+# convert features to matrix - with date 
+trainMTX_long=model.matrix(new_cases_per_100k~., trainCases_long)[, -1]
+testMTX_long=model.matrix(new_cases_per_100k~., testCases_long)[, -1]
+
+#Convert features to matric -w/o date
+trainMTX_policiesOnly_long = model.matrix(new_cases_per_100k~. -submission_date -state, trainCases_long)[, -1]
+testMTX_policiesOnly_long = model.matrix(new_cases_per_100k~. -submission_date -state, testCases_long)[, -1]
+```
+
+## Correlation Plot - for continuous variables
+
+```{r, fig.width=12, fig.height=10}
+#should run once we add continuous control variables
+
+``` 
+
+## Variable Frequency - for categorical variables 
+```{r}
+graph = trainCases %>% 
+  select(c(4:11)) %>% 
+  ggpairs
+```
+
+# Modelling 
+
+Could start with Lasso? For feature selection...
+
+## Model 2. Random Forest
+
+Next, a tree-based model is applied for this classification analysis. 
+
+```{r}
+#Define random grid parameters for tuning the models
+tc = trainControl(method = "repeatedcv",
+                         number = 10, 
+                         search ="grid")
+
+tg = expand.grid(.mtry= c(1,2,3,4))
+``` 
+
+```{r}
+#create empty data frame to store each of the models in: 
+modellist = list()
+
+#Train the Model
+for (ntree in c(1000,1500,2000,2500)){
+  rfModel = train(new_cases_per_100k ~ . -submission_date -state,
+                  trainCases,
+                  method = "rf",
+                  metric = "RMSE",
+                  trControl = tc,
+                  tuneGrid = tg)
+  key <- toString(ntree)
+  modellist[[key]] <- rfModel
+}
+```
+
+```{r}
+#Create training results data frame
+trainResults = data.frame(
+  ntrees = rep(c(1000, 1500, 2000, 2500), each = 4), 
+  mtry = c("1","2","3","4"), 
+  RMSE = c(modellist$"1000"$results[,"RMSE"],
+           modellist$"1500"$results[,"RMSE"],
+           modellist$"2000"$results[,"RMSE"],
+           modellist$"2500"$results[,"RMSE"])
+)
+
+#plot training results
+ggplot(trainResults, aes(x = ntrees, y = RMSE)) + 
+  geom_line(aes(color = mtry)) + 
+  geom_point(aes(color = mtry))
+```
+
+```{r}
+#Predict results using ntre = 2500 and mtry = 4
+rfPred = predict(modellist$"2000", newdata = testCases)
+rfRMSE = sqrt(mean ( (testCases$new_cases_per_100k - rfPred) ^ 2 ) )
+```
+
+Questions: 
+1. training data? is the model automatically bagging? 
+2. in the context of a regression tree, what do the control variables mean?
+3. Should we be creating a validation set for model selection? Separately from a test set for model evaluation? 
+
+## Model 3. XGBoost
+
+```{r}
+#Convert the predictor variable matrices to xgb.DMatrix data types
+XGBTrain = xgb.DMatrix(trainMTX)
+XGBTest = xgb.DMatrix(testMTX)
+XGBTrain_polsOnly = xgb.DMatrix(trainMTX_policiesOnly)
+XGBTest_polsOnly = xgb.DMatrix(testMTX_policiesOnly)
+XGBTrain_long = xgb.DMatrix(trainMTX_long)
+XGBTest_long = xgb.DMatrix(testMTX_long)
+XGBTrain_polsOnly_long = xgb.DMatrix(trainMTX_policiesOnly_long)
+XGBTest_polsOnly_long = xgb.DMatrix(testMTX_policiesOnly_long)
+
+#Define random grid parameters for tuning the models
+XGBtc=trainControl(
+  method='cv',
+  number=5,
+  allowParallel=TRUE,
+  verboseIter=FALSE,
+  returnData=FALSE
+)
+# create grid for tuning hyperparameters
+XGBtg <- expand.grid(nrounds = c(20, 50, 100),
+                       max_depth = c(5, 10, 15),
+                       colsample_bytree = seq(0.5, 0.9, length.out = 5),
+                       eta = c(0.1, 0.2, 0.4),
+                       gamma=c(0, 2, 3),
+                       min_child_weight = 1,
+                       subsample = 0.75
+                      )
+
+```
+
+### Cases - March through April with Date and State
+```{r warning = FALSE}
+# train model - with dates and state 
+XGBModel_short = train(
+  XGBTrain, trainCases$new_cases_per_100k,  
+  trControl = XGBtc,
+  tuneGrid = XGBtg,
+  method = "xgbTree")
+```
+
+```{r}
+# get hyperparameters of best model from grid search 
+XGBModel_short$bestTune
+```
+
+```{r}
+XGBPred_short=predict(XGBModel_short, XGBTest)
+XGBRMSE_short = sqrt(mean ((testCases$new_cases_per_100k - XGBPred_short) ^ 2 ) )
+```
+
+### Cases - March through April only indicators 
+```{r warning = FALSE}
+# train model - only policies 
+XGBModel_polsOnly = train(
+  XGBTrain_polsOnly, trainCases$new_cases_per_100k,  
+  trControl = XGBtc,
+  tuneGrid = XGBtg,
+  method = "xgbTree")
+```
+
+```{r}
+# get hyperparameters of best model from grid search 
+XGBModel_polsOnly$bestTune
+```
+
+```{r}
+XGBPred_polsOnly=predict(XGBModel_polsOnly, XGBTest_polsOnly)
+XGBRMSE_polsOnly = sqrt(mean ((testCases$new_cases_per_100k - XGBPred_polsOnly) ^ 2 ) )
+```
+
+### Cases - March through December with date and state
+```{r warning = FALSE}
+# train model - with dates and state 
+XGBModel = train(
+  XGBTrain_long, trainCases_long$new_cases_per_100k,  
+  trControl = XGBtc,
+  tuneGrid = XGBtg,
+  method = "xgbTree")
+```
+
+```{r}
+# get hyperparameters of best model from grid search 
+XGBModel$bestTune
+```
+
+```{r}
+XGBPred_long=predict(XGBModel, XGBTest_long)
+XGBRMSE_long = sqrt(mean ((testCases$new_cases_per_100k - XGBPred_long) ^ 2 ) )
+```
+
+### Cases - March through December indicators only
+```{r warning = FALSE}
+# train model - only policies 
+XGBModel_polsOnly_long = train(
+  XGBTrain_polsOnly_long, trainCases_long$new_cases_per_100k,  
+  trControl = XGBtc,
+  tuneGrid = XGBtg,
+  method = "xgbTree")
+```
+
+1. If XGBoost is performing this well on unseen data- do we need to add more variables? 
