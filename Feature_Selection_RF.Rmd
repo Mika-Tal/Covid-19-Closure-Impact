@@ -140,7 +140,6 @@ datapreds <- datapreds[, -which(names(datapreds) %in% drops)]
 
 ```{r}
 
-#let Tobi know what gets kept 
 drops<-c( "year", "week", "two_week_forecast_date") #droping 
 working_df <-working_df[, -which(names(working_df) %in% drops)]
 ##Moving Ouctome Variable to front of dataset for ease of splitting
@@ -177,6 +176,7 @@ bestmtry_var<- bestmtry[1,1]
 ```{r}
 
 r.forest <- function(working_df){
+ 
   rf <- randomForest(y ~ ., mtry= bestmtry_var, 
   data=working_df)
 
@@ -192,8 +192,6 @@ r.forest <- function(working_df){
   return(top_f)
 }
  
-
-
 
 rf.tops <-function(sample_df, top_f){
   new<-sample_df%>%
@@ -212,7 +210,10 @@ rf.tops <-function(sample_df, top_f){
 ```{r}
 
 tops <-r.forest(working_df)
+```
 
+###Start of GLMNET
+```{r}
 datatrain<-rf.tops(datatrain, tops)
 datatest<-rf.tops(datatest,tops)
 datapreds<- rf.tops(datapreds,tops)
@@ -336,7 +337,7 @@ train_glm<- glmnet(
   y = datatrain_glmnet[,1], relax = FALSE, nfolds= 3)
 
 
-plot(train_glm)
+#plot(train_glm)
 
 lamMin<- min(train_glm[["lambda"]])
 
@@ -351,8 +352,15 @@ test<- as.data.frame(test)
 glm_test<- as.data.frame(datatest_glmnet)
 preds_act<- cbind(test, glm_test$y)
 
-
 RMSE_glm<- sqrt(mean(preds_act[,2]-preds_act[,1])^2)
+
+
+```
+
+
+###Plotting 
+
+```{r}
 
 
 
