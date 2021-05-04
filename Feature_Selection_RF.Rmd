@@ -86,10 +86,10 @@ train_df = function(df) {
   return(train)
 }
 
-  latest_date = max(glm_feats$date)
+  latest_date = max(df$date)
   #Create a training set - reserving the last two weeks with obvserved 
   #two_week__outcome are reserved as a test set. 
-  train = glm_feats[glm_feats$two_week_forecast_date <= (latest_date - 14), ]
+  train = df[df$two_week_forecast_date <= (latest_date - 14), ]
 
 #Create test set
 test_df = function(df) {
@@ -291,16 +291,17 @@ df1 <- df1[, c(col_idx, (1:ncol(df1))[-col_idx])]
 date_hold<- as.data.frame(df1$date)
 colnames(date_hold)<-"date"
 #two_week_forecast_date<-as.data.frame(features1$two_week_forecast_date)
-drops<-c( "date") #droping 
+drops<-c("date") #droping 
 df1<-df1[, -which(names(df1) %in% drops)]
 
- feats<- function(xf, column_numbers) {
+   feats<- function(xf, column_numbers) {
 
-   xf %>% 
-    mutate_at(vars(column_numbers), funs(sqr = (.)^2))%>%
-   mutate_at(vars(column_numbers), funs(cube =(.)^3))
-   }
-end<-ncol(features1)
+    xf %>% 
+     mutate_at(vars(column_numbers), funs(sqr = (.)^2))%>%
+     mutate_at(vars(column_numbers), funs(cube =(.)^3))
+     }
+ 
+end<-ncol(df1)
 
 #, two_week_forecast_date
 return(cbind(feats(df1, 2:end), date_hold)) #do not include y or "id" in poly calcs
