@@ -393,6 +393,8 @@ final_preds$Predicted<- final_preds[,1]
 map_plot
 
 ```
+
+
 ```{r}
 obs_vs_pred_plot = ggplot(preds_act, aes(x = Observed, y = Predicted)) +
   geom_point() +
@@ -447,7 +449,7 @@ obs_vs_pred_plot
    outcome_plot_all
 ```
 
-
+#Residual Density plot
 ```{r}
 
     GLMResids = datatest_poly %>% 
