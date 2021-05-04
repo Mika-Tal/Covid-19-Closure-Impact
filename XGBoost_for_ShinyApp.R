@@ -8,23 +8,24 @@ loadlibs = function(libs) {
   }
 }
 libs = c("tidyverse","data.table","stargazer", "caret", "e1071", "splines",
-         "randomForest", "C50", "xgboost", "ggplot2", "cowplot", "forecast")
+         "randomForest", "C50", "xgboost", "ggplot2", "cowplot", "forecast",
+         "maps", "DataExlorer")
 loadlibs(libs)
 
 
 # Load Data Set
 original_df = read.csv("Data/shiny_merged_dataset_example.csv") %>% 
-  mutate_at(c('week_first_date'), ~ as.Date(., "%Y-%m-%d")) %>% 
-  mutate(two_week_forecast_date = week_first_date + 14) %>% 
+  mutate_at(c('Date'), ~ as.Date(., "%Y-%m-%d")) %>% 
+  mutate(two_week_forecast_date = Date + 14) %>% 
   mutate_if(is.character, as.factor) %>% 
   select(-1)
 # Get latest date 
-latest_date = max(original_df$week_first_date)
+latest_date = max(original_df$Date)
 #Two week outcome 
 twoWeek_df = original_df %>% 
-  select(week_first_date, State, Outcome.Variable) %>% 
-  rename(two_week_outcome = Outcome.Variable,
-         two_week_forecast_date = week_first_date) 
+  select(Date, State, covid_measure) %>% 
+  rename(two_week_outcome = covid_measure,
+         two_week_forecast_date = Date) 
 #Merge with original to create a working df
 working_df = original_df %>% 
   left_join(twoWeek_df,
