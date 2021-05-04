@@ -128,12 +128,12 @@ datatrain<-train_df(working_df)
 datatest<-test_df(working_df)
 datapreds<- pred_df(working_df)
 
-drops<-c("year","week","two_week_forecast_date")
+#drops<-c("year","week","two_week_forecast_date")
 
 #datatest$two_week_forecast_date
-datatrain <-datatrain[, -which(names(datatrain) %in% drops)]
-datatest <- datatest[, -which(names(datatest) %in% drops)]
-datapreds <- datapreds[, -which(names(datapreds) %in% drops)]
+#datatrain <-datatrain[, -which(names(datatrain) %in% drops)]
+#datatest <- datatest[, -which(names(datatest) %in% drops)]
+#datapreds <- datapreds[, -which(names(datapreds) %in% drops)]
 #datacleaning for randomforest 
 ```
 
@@ -166,9 +166,13 @@ The following is tuning the number of varaibles reandomple sampled as candiate a
 
 # Algorithm Tune (tuneRF)
 set.seed(10)
-bestmtry <- tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500)
+bestmtry <- as.data.frame (tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500))
 print(bestmtry)
-bestmtry_var<- bestmtry[1,1]
+
+
+bestmtry_var<- bestmtry[which(bestmtry$OOBError == min(bestmtry$OOBError)),1]
+
+
 
 ```
 
@@ -210,13 +214,19 @@ rf.tops <-function(sample_df, top_f){
 ```{r}
 
 tops <-r.forest(working_df)
+
+
+  varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
+           type=NULL, class=NULL, scale=TRUE, 
+           main=deparse(substitute(rf))) 
+  
 ```
 
 ###Start of GLMNET
 ```{r}
-datatrain<-rf.tops(datatrain, tops)
-datatest<-rf.tops(datatest,tops)
-datapreds<- rf.tops(datapreds,tops)
+datatrain_rf<-rf.tops(datatrain, tops)
+datatest_rf<-rf.tops(datatest,tops)
+datapreds_rf<- rf.tops(datapreds,tops)
 
 ```
 
@@ -258,9 +268,9 @@ state_latLong <- geo%>%
 #Joining Long/Lat data and selected features
 ```{r}
 # this step should be moved to data cleaning, ask if their data is by state or county, county can be a direct match to the original dataset 
-datatrain_lm<- geo_join(datatrain)
-datatest_lm<- geo_join(datatest)
-datapreds_lm<-geo_join(datapreds)
+datatrain_lm<- geo_join(datatrain_rf)
+datatest_lm<- geo_join(datatest_rf)
+datapreds_lm<-geo_join(datapreds_rf)
 #id<-rownames(features)
 #features<-cbind(id=id, features)
 
@@ -336,7 +346,6 @@ train_glm<- glmnet(
   x = datatrain_glmnet[,-1],
   y = datatrain_glmnet[,1], relax = FALSE, nfolds= 3)
 
-
 #plot(train_glm)
 
 lamMin<- min(train_glm[["lambda"]])
@@ -350,18 +359,115 @@ preds<- predict(train_glm, newx= datapreds_glmnet[,-1], newy=datapreds_glmnet[,1
 
 test<- as.data.frame(test) 
 glm_test<- as.data.frame(datatest_glmnet)
+
 preds_act<- cbind(test, glm_test$y)
-
 RMSE_glm<- sqrt(mean(preds_act[,2]-preds_act[,1])^2)
+preds_act$Observed<- preds_act[,1]
+preds_act$Predicted<- preds_act[,2]
+preds_act$two_week_forecast_date <- datapreds$two_week_forecast_date
 
+final_preds<- cbind(preds, datapreds_geo)
+final_preds$Predicted<- final_preds[,1]
 
 ```
 
 
 ###Plotting 
 
+
+```{r}
+
+  final_preds = final_preds%>%
+    mutate(state = tolower(setNames(state.name, state.abb)[state]))
+  #create map data 
+
+ #create map data 
+  map = map_data("state") %>% 
+    full_join(final_preds, by = c("region" = "state"))
+  #plot
+  map_plot = ggplot(map, aes(long, lat, group = group)) +
+    geom_polygon(aes(fill = Predicted), color = "white")+
+    scale_fill_viridis_c(option = "B", direction=-1)+
+    ggtitle("Predicted COVID Measure (per 100,000) Next Week")
+
+map_plot
+
+```
+```{r}
+obs_vs_pred_plot = ggplot(preds_act, aes(x = Observed, y = Predicted)) +
+  geom_point() +
+  geom_abline()
+
+obs_vs_pred_plot
+
+
+ obs_vs_pred = preds_act %>% 
+    mutate(Observed = log(Observed),
+           Predicted = log(Predicted))
+  
+  obs_vs_pred_plot = ggplot(obs_vs_pred, aes(x = Observed, y = Predicted),
+                            color = 'white') +
+    geom_point() +
+    geom_abline() +
+    #geom_line(aes(y = log(baselineRMSE(test)), color = "#F8766D")) +
+    xlab("Log(Observed)") +
+    ylab("Log(Predicted)") +
+    ggtitle("Log GLM Prediction v. Observed")
+    #scale_colour_manual(name = FALSE, values =c('#00BFC4'='#00BFC4','#F8766D'='#F8766D'),
+                        #labels = c('45-degree','Baseline')) +
+    theme_bw()
+
+  
+  obs_vs_pred_plot
+
+
+```
+
+
+#Predictions all plot
 ```{r}
 
 
+  #Plot Predictions
+  outcome_all = datatrain %>% 
+    select(two_week_forecast_date, y) %>%
+    rename(Date = two_week_forecast_date,
+           Outcome = y) %>% 
+    mutate (Pred_vs_Obs = "Observed") %>% 
+    rbind(tibble(Date = preds_act$two_week_forecast_date,
+                 Outcome = preds_act$Predicted,
+                 Pred_vs_Obs = "Predicted"))
+ 
+
+ outcome_plot_all = ggplot(outcome_all, aes(x = Date, y = Outcome))+
+    geom_point(aes(color = Pred_vs_Obs)) +
+    theme_bw()+
+   ggtitle("Glmnet Predictions")
+  
+   outcome_plot_all
+```
+
+
+```{r}
+
+    GLMResids = datatest_poly %>% 
+      select(two_week_backcast, y) %>% 
+      rename(Observed = y) %>% 
+      mutate(Model = "GLM") %>% 
+      bind_cols(tibble(Predicted = preds_act$Predicted)) %>% 
+      mutate(Residuals = Predicted - Observed) %>% 
+      select(Residuals, Model)
+    #df for baseline residuals
+
+    BLResids = tibble(Residuals = mean(datatest_poly$two_week_backcast) - datatest_poly$y,
+                      Model = "Baseline")
+    #Combine dfs for the plot
+    resids = GLMResids %>% 
+      bind_rows(BLResids)
+    #Plot
+    resids_plot = ggplot(resids, aes(x = Residuals, fill = Model)) +
+      geom_density( color = 'white', alpha = 0.7) +
+      theme_bw()
+ resids_plot
 
 ```
