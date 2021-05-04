@@ -12,7 +12,7 @@ library(shinydashboard)
 library(tidyverse)
 library(DT)
 # library(plotly) #used to create interactive plots
-library(glmnet) # to perform L1 regularization
+#library(glmnet) # to perform L1 regularization
 library(tidymodels)
 library(covidcast)
 library(lubridate)
@@ -20,8 +20,8 @@ library(randomForest)
 library(xgboost)
 library(caret)
 # add these libraries 
-# libs = c("tidyverse","data.table","stargazer", "caret", "e1071", "splines",
-#          "randomForest", "C50", "xgboost", "ggplot2", "cowplot", "forecast")
+libs = c("tidyverse","data.table","stargazer", "caret", "e1071", "splines",
+         "randomForest", "C50", "xgboost", "ggplot2", "cowplot", "forecast")
 
 
 #read in static datasets -- controls only and the sample user input data
@@ -829,8 +829,6 @@ only_sel_ctrls <- reactive({
  }
  
 
- 
-
  #make a reactive data frame after the two week forecast has been added
  forecast_data <- reactive({
    
@@ -854,11 +852,10 @@ only_sel_ctrls <- reactive({
  randfor_data <- reactive({
    
    #drops columns for random forest
-   drops <-c("Year", "Week","Date", "two_week_forecast_date") #droping 
+   drops <-c( "Year", "Week","Date", "two_week_forecast_date") #droping 
    
    #drops columns that are in the above vector
    df <- forecast_data()[, -which(names(forecast_data()) %in% drops)]
-   
    
    #changes the names of columns to help with the predictions to follow later
    colnames(df)[which(names(df) == "covid_measure")] <- "two_week_backcast"
@@ -871,15 +868,10 @@ only_sel_ctrls <- reactive({
    #reorganizes the dataframe so that 
    df <- df[, c(col_idx, (1:ncol(df))[-col_idx])]
    
-   
-   #replaces NA values in the two_week_outcome variable with NAs
-   df <- df %>%  drop_na(y)
-   
  }) 
  
 #returns a data frame with the variable importances (according to node purity) after passing in the cleaned data for random forests
 randfor_model <- function(randfor_data) ({
-  
   
   #creates the x and y dataframes needed for random forests
   end <- ncol(randfor_data)
@@ -889,102 +881,52 @@ randfor_model <- function(randfor_data) ({
 
   #tune the random forest model
   set.seed(10)
-  bestmtry <- tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500)
-  bestmtry_var<- bestmtry[1,1]
+  #bestmtry <- tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500)
+  #bestmtry_var<- bestmtry[1,1]
+# 
+  rf <- randomForest(y ~ ., mtry =  3,
+                     data = randfor_data
+  )
 
-  
-  # rf = rand_forest(mode="regression") %>%
-  #   set_engine("randomForest") %>% 
-  #   fit(y ~ ., randfor_data) #removed RDATE variable because it has too many category
-  # 
-  # rf <- randomForest(y ~ ., mtry = bestmtry_var,
-  #                    data = randfor_data
-  # )
-  # 
-  # #extracts the variable importances
-  # features <- as.data.frame(rf$importance)
-  # features <- as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity")))
 
-  return(randfor_data$y)
+  #extracts the variable importances
+ features <- as.data.frame(rf$importance)
+ # features <- as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity")))
+
+  return(features)
   
 })
 
-#DEBUGGINNG ---------------------------------------------------
 
-# forecast_data_ex <- addTwoWeekForecast(merged_ex)
-# 
-# #removes the "X" column
-# forecast_data_ex <- forecast_data_ex %>% select(-1)
-# 
-# 
-# 
-# #drops columns for random forest
-# drops <-c( "Year", "Week","Date", "two_week_forecast_date") #droping
-# 
-# #drops <-c( "Year", "Week") #droping
-# 
-# 
-# 
-# #drops columns that are in the above vector
-# df <- forecast_data_ex[, -which(names(forecast_data_ex) %in% drops)]
-# 
-# #changes the names of columns to help with the predictions to follow later
-# colnames(df)[which(names(df) == "covid_measure")] <- "two_week_backcast"
-# colnames(df)[which(names(df) == "two_week_outcome")] <- "y"
-# 
-# 
-# ##Moving Ouctome Variable to front of dataset for ease of splitting
-# col_idx <- grep("^y$", names(df))
-# 
-# #reorganizes the dataframe so that
-# df <- df[, c(col_idx, (1:ncol(df))[-col_idx])]
-# 
-# df <- df %>%  drop_na(y)
-# 
-
-# ex_features <- randfor_model(df)
-# 
-# 
-# #example of missingness
-# 
-# miss_ex <- check_missingness(df)
-# 
-
-#-------------------------------------------------------
-# 
 # output$varImp <- renderPlot({
-# 
-#   var_imp <- randfor_model(randfor_data())
-# 
-#   var_imp <- var_imp %>%
-#     transform(Feature = reorder(Feature, NodPurity))
 #   
-#   var_imp %>%
-#     ggplot(aes(x = Feature, y = NodPurity)) +
-#     geom_bar(stat = "identity") +
-#     coord_flip()
+#   var_imp <- randfor_model(randfor_data()) 
 # 
-# 
-#   var_imp %>%
+#   var_imp %>% 
 #   ggplot(aes(x = "Feature", y = "NodPurity")) +
 #   geom_bar(stat = "identity")
-# 
+#   
 # })
-# 
+
+# plotOutput(outputId = "varImp"),
 
 
 output$rand_for <- renderDataTable({
-
+  
   var_imp <- randfor_model(randfor_data())
-
-  DT::datatable(data =  var_imp,
+  
+  DT::datatable(data =  randfor_data(),
                 rownames = FALSE,
                 options = list(scrollX = T))
 })
 
  
  # #Pre-Processing the Data for Feature Selection ------------------------------------------------
-
+ # #creates a separate copy of the reactive dataset to deal with feature selection
+ # merged_dataset_feat_sel <- reactive({
+ #   merged_dataset()[, colSums(is.na(merged_dataset()))==0]
+ #   
+ # })
  
  
  #forecast_data() #reactive data Frame that already includes the two week forecasted data
@@ -1036,7 +978,7 @@ output$rand_for <- renderDataTable({
 
  
  #creates the training dataset for the XGBoost model 
- createTrainSet <- function(forecast_data) {
+ createXGBTrainSet <- function(forecast_data) {
    
    latest_date = max(forecast_data$Date)
    
@@ -1048,7 +990,7 @@ output$rand_for <- renderDataTable({
  #creates a reactive dataframe for the training data 
  train_data <- reactive ({
    
-   createTrainSet(forecast_data())
+   createXGBTrainSet(forecast_data())
    
    
  })
@@ -1139,7 +1081,7 @@ xgb_model_output <- eventReactive(input$runxgb, {
  
 # 
 #creates the test set
- createTestSet <- function(forecast_data) {
+ createXGBTestSet <- function(forecast_data) {
 
    latest_date = max(forecast_data$Date)
 
@@ -1154,7 +1096,7 @@ xgb_model_output <- eventReactive(input$runxgb, {
 #creates a reactive dataframe for the test data
 test_data <- reactive ({
 
-   createTestSet(forecast_data())
+   createXGBTestSet(forecast_data())
 
 
  })

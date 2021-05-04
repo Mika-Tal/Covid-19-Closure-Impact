@@ -1,0 +1,279 @@
+---
+title: "aaamlp_merge"
+date: "3/26/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+
+options(scipen = 999)
+```
+
+```{r}
+#load in the covid cases data
+covid.cases <- read.csv("United_States_COVID-19_Cases_and_Deaths_by_State_over_Time.csv", header = TRUE)
+
+
+#change date formatting
+covid.cases <- covid.cases %>% 
+  mutate(submission_date = lubridate::mdy(submission_date)) %>% 
+  select(-c("created_at", "consent_cases", "consent_deaths")) #getting rid of unnesscessary columns
+
+```
+
+```{r}
+#load in the election data 
+political.leaning <- read.csv("1976-2020-president.csv")
+```
+
+```{r}
+#filtering the political leaning data
+election.2020 <- political.leaning %>% 
+  filter(year == 2020) %>%  #keep only election results from 2020
+  select(state_po, party_detailed, candidatevotes, totalvotes) %>%  #keep only state column, and party information and total vote count
+  filter(party_detailed == "DEMOCRAT" | party_detailed == "REPUBLICAN")  %>%  #only keeps in democrats and republicans
+  mutate(per.of.vote =  candidatevotes/totalvotes, 
+         per.of.vote = round(per.of.vote * 100, digits = 2)) %>%  #created percentages of the voting behavior in 2020
+  group_by(state_po) %>% 
+  slice(which.max(per.of.vote)) %>% #which party had the highest percentage of the vote in that particular state
+  summarize(political.party.affilation = ifelse(party_detailed == "DEMOCRAT", "DEMOCRAT", "REPUBLICAN"),
+            political.party.affilation = as.factor(political.party.affilation)) #set the majority party as the political party affilation
+  
+
+```
+
+
+```{r}
+#combine covid and election data
+elec_covid_combo <- covid.cases %>%
+  left_join(election.2020, by = c("state" = "state_po"))
+
+
+```
+
+```{r}
+#read in and join the state census information
+state_census <- read.csv("state_census_edited.csv")
+
+census_covid_combo <- elec_covid_combo %>% 
+  left_join(state_census, by = c("state" = "State"))
+
+```
+
+```{r}
+#loading and cleaning the covid closure data
+closures_raw <- read.csv("closures.csv")
+
+closures_df <- closures_raw %>% slice(1:51) %>%
+  
+  rename(abbreviation = State.Abbreviation,
+         #day care
+         c_day_care_1 = Closed.day.cares,
+         o_day_care_1 = Reopened.child.care,
+         #restaurants
+         c_dine_in_restaurants_1 = Closed.restaurants.except.take.out,
+         o_dine_in_restaurants_1 = Reopened.restaurants,
+         c_dine_in_restaurants_2  = Re.Close.Indoor.Dining..Statewide.,
+         o_dine_in_restaurants_2 = Re.open.indoor.dining.statewide.x2,
+         #gym
+         c_gym_1 = Closed.gyms,
+         o_gym_1 = Reopened.gyms,
+         c_gym_2 = Re.Close.Gyms..statewide.,
+         o_gym_2 = Re.open.gyms.statewide.x2,
+         #movie theaters
+         c_movie_1 = Closed.movie.theaters,
+         o_movie_1 = Reopened.movie.theaters,
+         c_movie_2 = Re.Close.Movie.Theaters..statewide.,
+         o_movie_2 = Re.open.movie.theaters.statewide.x2,
+         #bars
+         c_bar_1 = Closed.bars,
+         o_bar_1 = Reopened.bars,
+         c_bar_2 =  Re.Close.Bars..statewide.,
+         o_bar_2 =  Re.open.bars.statewide.x2,
+         #casinos
+         c_casino_1 = Closed.casinos,
+         o_casino_1 = Reopened.casinos,
+         c_casino_2 = Re.close.casinos..statewide.,
+         o_casino_2 = Re.open.casinos.x2,
+         #schools & nursing home 
+         c_school = Closed.K.12.public.schools,
+        c_nursing_home_visits = Banned.visitors.to.nursing.homes
+         
+        
+         
+         
+         ) %>%
+  
+  mutate_at(c("c_day_care_1" , "o_day_care_1", "c_dine_in_restaurants_1", "o_dine_in_restaurants_1", "c_dine_in_restaurants_2", "o_dine_in_restaurants_2","c_gym_1" , "o_gym_1", "c_gym_2","o_gym_2", "c_movie_1","o_movie_1", "c_movie_2","o_movie_2", "c_bar_1","o_bar_1","c_bar_2","o_bar_2", "c_casino_1","o_casino_1","c_casino_2","o_casino_2","c_school","c_nursing_home_visits"
+              
+  ),
+            ~ as.Date(., "%m/%d/%Y")) %>% 
+  
+  select(c("abbreviation","c_day_care_1" , "o_day_care_1", "c_dine_in_restaurants_1", "o_dine_in_restaurants_1", "c_dine_in_restaurants_2", "o_dine_in_restaurants_2","c_gym_1" , "o_gym_1", "c_gym_2","o_gym_2", "c_movie_1","o_movie_1", "c_movie_2","o_movie_2", "c_bar_1","o_bar_1","c_bar_2","o_bar_2", "c_casino_1","o_casino_1","c_casino_2","o_casino_2","c_school","c_nursing_home_visits"
+              
+  )) %>% 
+  
+  #if policy nevery ended set end date to today
+  mutate(
+    
+    o_day_care_1 = replace_na(o_day_care_1,Sys.Date()),
+    o_dine_in_restaurants_1 = replace_na(o_dine_in_restaurants_1,Sys.Date()),
+    o_dine_in_restaurants_2 = replace_na(o_dine_in_restaurants_2,Sys.Date()),
+    o_gym_1 = replace_na(o_gym_1,Sys.Date()),
+    o_gym_2 = replace_na(o_gym_2,Sys.Date()),
+    o_movie_2 = replace_na(o_movie_2,Sys.Date()),
+    o_movie_1 = replace_na(o_movie_1,Sys.Date()),
+    o_bar_2 = replace_na(o_bar_2,Sys.Date()),
+    o_bar_1 = replace_na(o_bar_1,Sys.Date()),
+    o_casino_1 = replace_na(o_casino_1,Sys.Date()),
+    o_casino_2 = replace_na(o_casino_2,Sys.Date())
+  )
+
+```
+
+
+```{r}
+#Days after policy start to flag , change as needed
+days_buffer = 0 
+
+working_df = census_covid_combo %>% #joining combined election and covid data to the policy dataset
+  left_join(closures_df, by = c("state" = "abbreviation")) %>% 
+  
+  #Calculating the number of days since closure
+  mutate(
+    #day care
+    day_care_closed =  as.factor(if_else((submission_date - c_day_care_1  >=  days_buffer) & (submission_date - o_day_care_1  <=  days_buffer)  , 1 , 0)),
+         day_care_closed =  replace_na(day_care_closed, 0),
+    
+        #restaurants
+    restaurants_closed = as.factor(if_else(((submission_date - c_dine_in_restaurants_1  >=  days_buffer) & (submission_date - o_dine_in_restaurants_1  <=  days_buffer)) | ( (submission_date - c_dine_in_restaurants_2  >=  days_buffer) & (submission_date - o_dine_in_restaurants_2  <=  days_buffer))  , 1 , 0)),
+
+         restaurants_closed =  replace_na(restaurants_closed, 0),
+         
+    
+            #gyms
+    gyms_closed = as.factor(if_else(((submission_date - c_gym_1  >=  days_buffer) & (submission_date - o_gym_1  <=  days_buffer)) | ( (submission_date - c_gym_2  >=  days_buffer) & (submission_date - o_gym_2  <=  days_buffer))  , 1 , 0)),
+
+         gyms_closed =  replace_na(gyms_closed, 0),
+    
+          #movie theatres
+    movie_theatres_closed = as.factor(if_else(((submission_date - c_movie_1  >=  days_buffer) & (submission_date - o_movie_1  <=  days_buffer)) | ( (submission_date - c_movie_2  >=  days_buffer) & (submission_date - o_movie_2  <=  days_buffer))  , 1 , 0)),
+
+         movie_theatres_closed =  replace_na(movie_theatres_closed, 0),
+    
+    
+          #bars
+    bars_closed = as.factor(if_else(((submission_date - c_bar_1  >=  days_buffer) & (submission_date - o_bar_1  <=  days_buffer)) | ( (submission_date - c_bar_2  >=  days_buffer) & (submission_date - o_bar_2  <=  days_buffer))  , 1 , 0)),
+
+         bars_closed =  replace_na(bars_closed, 0),
+    
+          #bars
+    casinos_closed = as.factor(if_else(((submission_date - c_casino_1  >=  days_buffer) & (submission_date - o_casino_1  <=  days_buffer)) | ( (submission_date - c_casino_2  >=  days_buffer) & (submission_date - o_casino_2  <=  days_buffer))  , 1 , 0)),
+
+         casinos_closed =  replace_na(casinos_closed, 0),
+    
+    
+    #schools & nursing home
+    schools_closed = as.factor(if_else((submission_date - c_school  >=  days_buffer)   , 1 , 0)),
+    schools_closed =  replace_na(schools_closed, 0),
+    
+    nusring_home_visits_banned = as.factor(if_else((submission_date - c_nursing_home_visits  >=  days_buffer)   , 1 , 0)),
+    nusring_home_visits_banned =  replace_na(nusring_home_visits_banned, 0)
+    
+         )
+
+
+
+
+```
+
+
+```{r}
+
+# data cleaning
+
+#removing US territories (non-states)
+working_df <- working_df %>% drop_na(political.party.affilation)
+
+#remove commas from population and cast as number
+working_df$Total.population <- as.numeric(gsub(",","",working_df$Total.population))
+
+
+#Assuming all NAs in & new_cases new_death are zero cases/deaths{Maybe need to check}
+working_df %>% mutate(
+  new_death = replace_na(new_death,0),
+  new_case = replace_na(new_case,0)
+  )
+
+
+```
+
+```{r}
+#potential outcome variables
+
+#Some negative values in deaths and cases in original data
+
+  
+working_df$new_deaths_per_100k <- (as.numeric(working_df$new_death) / as.numeric(working_df$Total.population)) * 100000
+
+working_df$new_cases_per_100k <- (as.numeric(working_df$new_case) / as.numeric(working_df$Total.population)) * 100000
+
+working_df$log_new_deaths_per_100k <- log(working_df$new_deaths_per_100k)
+
+working_df$log_new_cases_per_100k <- log(working_df$new_cases_per_100k)
+
+```
+
+
+
+
+
+
+
+#Useless keeping track of what was used out of the closures csv
+
+ [4] "Closed.K.12.public.schools"      ....1                    
+ [5] "Closed.day.cares"       1                               
+ [6] "Banned.visitors.to.nursing.homes"  ....1                  
+ [7] "Closed.other.non.essential.businesses"                 
+ [8] "Closed.restaurants.except.take.out"    1                
+ [9] "Closed.gyms"         1                                  
+[10] "Closed.movie.theaters"   1                              
+[11] "Closed.bars"       1                                    
+[12] "Closed.casinos"     1                                   
+[13] "Mention.of.Tribal.Casinos"                             
+[14] "Began.to.reopen.businesses.statewide"                  
+[15] "Reopened.restaurants"        1                          
+[16] "Initially.reopened.restaurants.for.outdoor.dining.only"
+[17] "Reopened.gyms"     1                                    
+[18] "Reopened.movie.theaters"   1                            
+[19] "Reopened.hair.salons.barber.shops"                     
+[20] "Reopened.religious.gatherings"                         
+[21] "Reopened.other.non.essential.retail"                   
+[22] "Reopened.bars"   1                                      
+[23] "Reopened.child.care"       1                            
+[24] "Reopened.casinos"   1                                   
+[25] "Begin.to.Re.Close.Bars"                                
+[26] "Re.Close.Bars..statewide."   2                          
+[27] "Re.Close.Movie.Theaters..statewide."   2                
+[28] "Re.Close.Gyms..statewide."  2                            
+[29] "Re.close.hair.salons.and.barber.shops..statewide."     
+[30] "Re.Close.Indoor.Dining..Statewide."  2                   
+[31] "Re.close.casinos..statewide."          2                
+[32] "Re.open.indoor.dining.statewide.x2"    2                
+[33] "Re.open.bars.statewide.x2"    2                         
+[34] "Re.open.gyms.statewide.x2"    2                         
+[35] "Re.open.movie.theaters.statewide.x2"   2                
+[36] "Re.open.casinos.x2"  2                                  
+[37] "Close.Bars..x3."                                       
+[38] "Close.Movie.Theaters..x3."                             
+[39] "Close.Gyms..x3."                                       
+[40] "Close.Indoor.Dining..x3."  
+
+```
+
+
+write.csv(working_df,"C:/Users/hassa/Desktop/ML Pipeline/Project/working_0days.csv")
+
