@@ -453,6 +453,8 @@ obs_vs_pred_plot
 #Residual Density plot
 ```{r}
 
+#reds<- as.data.frame(preds_act$Predicted-preds_act$Observed)
+
     GLMResids = datatest_poly %>% 
       select(two_week_backcast, y) %>% 
       rename(Observed = y) %>% 
@@ -473,4 +475,6 @@ obs_vs_pred_plot
       theme_bw()
  resids_plot
 
+ 
+# write.csv(reds, "GLM_Rediduals.csv")
 ```
