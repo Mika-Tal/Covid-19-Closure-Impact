@@ -20,7 +20,7 @@ loadlibs(libs)
 ```
 
 ```{r}
-setwd("~/GitHub/Covid-19-Closure-Impact")
+#setwd("~/GitHub/Covid-19-Closure-Impact")
 
 #df<-read.csv('Covid_Pred.csv')
 
@@ -86,10 +86,17 @@ train_df = function(df) {
   return(train)
 }
 
+<<<<<<< HEAD
+  latest_date = max(working_df$date)
+  #Create a training set - reserving the last two weeks with obvserved 
+  #two_week__outcome are reserved as a test set. 
+  train = working_df[working_df$two_week_forecast_date <= (latest_date - 14), ]
+=======
   latest_date = max(df$date)
   #Create a training set - reserving the last two weeks with obvserved 
   #two_week__outcome are reserved as a test set. 
   train = df[df$two_week_forecast_date <= (latest_date - 14), ]
+>>>>>>> 029a6e4f06346400a4b34657ec2444de3744d7a2
 
 #Create test set
 test_df = function(df) {
@@ -296,16 +303,23 @@ df1<-df1[, -which(names(df1) %in% drops)]
 
    feats<- function(xf, column_numbers) {
 
+<<<<<<< HEAD
+   xf %>% 
+    mutate_at(vars(column_numbers), funs(sqr = (.)^2))%>%
+   mutate_at(vars(column_numbers), funs(cube =(.)^3))
+   }
+=======
     xf %>% 
      mutate_at(vars(column_numbers), funs(sqr = (.)^2))%>%
      mutate_at(vars(column_numbers), funs(cube =(.)^3))
      }
  
+>>>>>>> 029a6e4f06346400a4b34657ec2444de3744d7a2
 end<-ncol(df1)
 
 #, two_week_forecast_date
 return(cbind(feats(df1, 2:end), date_hold)) #do not include y or "id" in poly calcs
-}
+} 
 #one<- as.character(top[1,1])
 
 #typeof(features1$two_week_prior)
@@ -351,9 +365,9 @@ train_glm<- glmnet(
 
 lamMin<- min(train_glm[["lambda"]])
 
-test<-predict(train_glm, newx= datatest_glmnet[,-1], newy=datatest_glmnet[,1], s = lamMin , interval="confidence")
+test_glm<-predict(train_glm, newx= datatest_glmnet[,-1], newy=datatest_glmnet[,1], s = lamMin , interval="confidence")
 
-preds<- predict(train_glm, newx= datapreds_glmnet[,-1], newy=datapreds_glmnet[,1], s = lamMin , interval="confidence")
+preds_glm<- predict(train_glm, newx= datapreds_glmnet[,-1], newy=datapreds_glmnet[,1], s = lamMin , interval="confidence")
 ```
 #RMSE testing 
 ```{r}
