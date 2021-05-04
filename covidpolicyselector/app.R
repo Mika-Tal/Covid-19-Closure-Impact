@@ -19,6 +19,7 @@ library(lubridate)
 library(randomForest)
 library(xgboost)
 library(caret)
+library(fuzzyjoin)
 # add these libraries 
 # libs = c("tidyverse","data.table","stargazer", "caret", "e1071", "splines",
 #          "randomForest", "C50", "xgboost", "ggplot2", "cowplot", "forecast")
@@ -27,6 +28,7 @@ library(caret)
 #read in static datasets -- controls only and the sample user input data
 state_controls <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/state_controls.csv")
 user_input_example <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/user_input_policies_full_example.csv")
+#geo <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/us-zip-code-latitude-and-longitude.csv", header= FALSE, stringsAsFactors = FALSE)
 
 merged_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
 
@@ -47,7 +49,8 @@ sidebar <- dashboardSidebar(
     menuItem("Data Merging", tabName = "merging"),
     menuItem("Data Pre-Processing", tabName = "missing"),
     menuItem("Feature Selection", tabName = "features"),
-    menuItem("Model Building ", tabName = "model"),
+    menuItem("Model 1: XGBoost ", tabName = "model_1"),
+    menuItem("Model 2: GLM", tabName = "model_2"),
     menuItem("Results", tabName = "results")
   )
 )
@@ -292,7 +295,7 @@ body <- dashboardBody(
             
             
             #TEMPORARILY displays the results of random forest
-            dataTableOutput(outputId = "rand_for"),
+            #dataTableOutput(outputId = "rand_for"),
             
             # #allows the user to decide how to create the training subset -----------------------------------
             # radioButtons(inputId = "train_decide",
@@ -310,15 +313,25 @@ body <- dashboardBody(
             # 
             
             
+            #Gives the user a message to describe the data table
+            htmlOutput(outputId = "forecast_table"),    
+            
             #adds visual space
             
             br(),
+
+            br(),
+
+            br(),
+
+            
+            #displays the two week forecast data
+            dataTableOutput(outputId = "forecast"),
             
             br(),
             
             br(),
-            
-            
+          
             #message to show label what is being displayed
             htmlOutput(outputId = "ft_sel"),
             
@@ -330,41 +343,14 @@ body <- dashboardBody(
             plotOutput(outputId = "varImp"),
             
             
-            #display the ROC curves for the different methodologies used
-            textOutput(outputId = "intro"),
-            textOutput(outputId = "selected_vars"), #results from regularization
-            
-            br(),
-            
-            br(),
-            
-            
-            plotOutput(outputId = "lasso_results"),
-            
-            plotOutput(outputId = "policy_over_time"),
-            dataTableOutput(outputId = "policy_table")
-            
-            
-            ##Model Building 7 Two-Week Forecast
-            
     ),
     
-    #Model Building page ------------------------------------------------------------------------------
-    tabItem("model",
+    #XGBoost Page ------------------------------------------------------------------------------
+    tabItem("model_1",
      
+            #TEMPORARY TABLE TO HELP WITH DEBUGGING            
+            dataTableOutput(outputId = "testing"),
             
-            #Gives the user a message to describe the data table
-            htmlOutput(outputId = "forecast_table"),    
-            
-            br(),
-            
-            br(),
-            
-            #displays the two week forecast data
-            dataTableOutput(outputId = "forecast"),
-            
-            br(),
-            br(),
             
             #click to run the XGBoost model
             actionButton(inputId = "runxgb",
@@ -431,6 +417,17 @@ body <- dashboardBody(
           
          
     
+    ),
+    
+    
+    tabItem("model_2",
+            
+            dataTableOutput(outputId = "glmtest"),
+            
+            br(),
+            
+            br()
+            
     ),
     
     
@@ -504,6 +501,9 @@ server <- function(input, output) {
         Date = ymd(time_value)
       ) %>%
       subset(Day == "Monday")
+    
+    #removes some erroneous negative values that get pulled from the Delphi API
+    covid_data <- covid_data[covid_data$covid_measure >= 0, ]
     
     covid_data <- subset(covid_data, select=-c(Day,time_value))
       
@@ -854,7 +854,7 @@ only_sel_ctrls <- reactive({
  randfor_data <- reactive({
    
    #drops columns for random forest
-   drops <-c("Year", "Week","Date", "two_week_forecast_date") #droping 
+   drops <-c("Year", "Week", "Date", "two_week_forecast_date") #droping 
    
    #drops columns that are in the above vector
    df <- forecast_data()[, -which(names(forecast_data()) %in% drops)]
@@ -877,147 +877,392 @@ only_sel_ctrls <- reactive({
    
  }) 
  
+ 
+ bestmtry <- function(randfor_data) ({
+   
+   #creates the x and y dataframes needed for random forests
+   end <- ncol(randfor_data)
+   x <- randfor_data[,2:end]
+   y <- randfor_data[,1]
+   
+   
+   #tune the random forest model
+   set.seed(10)
+   bestmtry <- as.data.frame(tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500))
+   bestmtry_var<- bestmtry[which(bestmtry$OOBError == min(bestmtry$OOBError)),1]
+   
+
+  return(bestmtry_var)
+   
+ })
+ 
+
+ 
+ 
 #returns a data frame with the variable importances (according to node purity) after passing in the cleaned data for random forests
-randfor_model <- function(randfor_data) ({
+randfor_model <- function(randfor_data, bestmtry) ({
+  
+  rf <- randomForest(y ~ ., mtry = bestmtry, data = randfor_data)
+  
+  #extracts the variable importances
+  features <- as.data.frame(rf$importance)
+  features <- as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity")))
   
   
-  #creates the x and y dataframes needed for random forests
-  end <- ncol(randfor_data)
-  x <- randfor_data[,2:end]
-  y <- randfor_data[,1]
-  
-
-  #tune the random forest model
-  set.seed(10)
-  bestmtry <- tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500)
-  bestmtry_var<- bestmtry[1,1]
+  #extracts the top 10 features with the highest node purity values
+  top <- top_n(features, 10, features$NodPurity)
 
   
-  # rf = rand_forest(mode="regression") %>%
-  #   set_engine("randomForest") %>% 
-  #   fit(y ~ ., randfor_data) #removed RDATE variable because it has too many category
-  # 
-  # rf <- randomForest(y ~ ., mtry = bestmtry_var,
-  #                    data = randfor_data
-  # )
-  # 
-  # #extracts the variable importances
-  # features <- as.data.frame(rf$importance)
-  # features <- as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity")))
-
-  return(randfor_data$y)
+  return(top)
   
 })
 
-#DEBUGGINNG ---------------------------------------------------
+#gets the top 10 features from the variable importance plot after random forests has been run
 
-# forecast_data_ex <- addTwoWeekForecast(merged_ex)
-# 
-# #removes the "X" column
-# forecast_data_ex <- forecast_data_ex %>% select(-1)
-# 
-# 
-# 
-# #drops columns for random forest
-# drops <-c( "Year", "Week","Date", "two_week_forecast_date") #droping
-# 
-# #drops <-c( "Year", "Week") #droping
-# 
-# 
-# 
-# #drops columns that are in the above vector
-# df <- forecast_data_ex[, -which(names(forecast_data_ex) %in% drops)]
-# 
-# #changes the names of columns to help with the predictions to follow later
-# colnames(df)[which(names(df) == "covid_measure")] <- "two_week_backcast"
-# colnames(df)[which(names(df) == "two_week_outcome")] <- "y"
-# 
-# 
-# ##Moving Ouctome Variable to front of dataset for ease of splitting
-# col_idx <- grep("^y$", names(df))
-# 
-# #reorganizes the dataframe so that
-# df <- df[, c(col_idx, (1:ncol(df))[-col_idx])]
-# 
-# df <- df %>%  drop_na(y)
-# 
+top_10 <- reactive({
+  
+  mtry <- 12
+  randfor_model(randfor_data(), mtry)
+  
+}) 
 
-# ex_features <- randfor_model(df)
-# 
-# 
-# #example of missingness
-# 
-# miss_ex <- check_missingness(df)
-# 
 
-#-------------------------------------------------------
-# 
-# output$varImp <- renderPlot({
-# 
-#   var_imp <- randfor_model(randfor_data())
-# 
-#   var_imp <- var_imp %>%
-#     transform(Feature = reorder(Feature, NodPurity))
+output$varImp <- renderPlot({
+
+   #mtry  <- ncol(randfor_data())/3
+ #  mtry <- 12
+  #mtry <- bestmtry(randfor_data())
+  #var_imp <- randfor_model(randfor_data(), mtry)
+    var_imp <- top_10()
+
+    var_imp <- var_imp %>%
+      transform(Feature = reorder(Feature, NodPurity))
+  
+    var_imp %>%
+      ggplot(aes(x = Feature, y = NodPurity)) +
+      geom_bar(stat = "identity") +
+      labs(title = "Variable Importance Plot", y = "Node Purity") +
+      coord_flip() +
+      theme(axis.text = element_text(size = 16),
+            axis.title = element_text(size = 20, face = "bold"),
+            plot.title = element_text(size = 22, face = "bold"))
+  
+
+})
+
+
+
+# output$rand_for <- renderDataTable({
 #   
-#   var_imp %>%
-#     ggplot(aes(x = Feature, y = NodPurity)) +
-#     geom_bar(stat = "identity") +
-#     coord_flip()
+#  # mtry <- bestmtry(randfor_data())
+#   mtry  <- ncol(randfor_data())/3
+#   var_imp <- randfor_model(randfor_data(), mtry)
 # 
-# 
-#   var_imp %>%
-#   ggplot(aes(x = "Feature", y = "NodPurity")) +
-#   geom_bar(stat = "identity")
-# 
+#   DT::datatable(data = var_imp,
+#                 rownames = FALSE,
+#                 options = list(scrollX = T))
 # })
-# 
 
+ 
+ #Pre-Processing the Data for Feature Selection & Create Required Train/Test/Prediction Data Sets ------------------------------------------------
 
-output$rand_for <- renderDataTable({
+#creates the training dataset for the XGBoost model 
+createTrainSet <- function(forecast_data) {
+  
+  latest_date = max(forecast_data$Date)
+  
+  train = forecast_data[forecast_data$two_week_forecast_date <= (latest_date - 14), ] %>% 
+    na.omit()
+  
+  return(train)
+}
 
-  var_imp <- randfor_model(randfor_data())
-
-  DT::datatable(data =  var_imp,
-                rownames = FALSE,
-                options = list(scrollX = T))
+#creates a reactive dataframe for the training data 
+train_data <- reactive ({
+  
+  createTrainSet(forecast_data())
+  
+  
 })
 
- 
- # #Pre-Processing the Data for Feature Selection ------------------------------------------------
+# #creating training data based on random forest
+# train_data_rf <- reactive({
+#   
+#   createTrainSet(randfor_data())
+# })
 
- 
- 
- #forecast_data() #reactive data Frame that already includes the two week forecasted data
- 
- 
- 
- 
- # #shows the variable importance plot
- # plotOutput(outputId = "varImp"),
- # 
- # br(),
- # 
- # #message to show label what is being displayed
- # htmlOutput(outputId = "ft_sel"),
- # 
- 
+#creates the test set
+createTestSet <- function(forecast_data) {
+  
+  latest_date = max(forecast_data$Date)
+  
+  test = forecast_data[(forecast_data$two_week_forecast_date <= latest_date) &
+                         (forecast_data$two_week_forecast_date > (latest_date - 14)), ]
+  
+  return(test)
+  
+}
 
- 
+
+#creates a reactive dataframe for the test data
+test_data <- reactive ({
+  
+  createTestSet(forecast_data())
+  
+  
+})
+
+#creates the predictions dataset
+createPredSet <- function(forecast_data) {
+  
+  latest_date = max(forecast_data$Date)
+  
+  
+  pred = forecast_data[forecast_data$two_week_forecast_date > latest_date, ]
+  
+  return(pred)
+  
+}
+
+#creates a reactive dataframe for the predictions dataset
+preds_data <- reactive ({
+  
+  createPredSet(forecast_data())
+  
+  
+})
 
 
 
 #data cleaning for glmnet ------------------------------------
+# top_10_vector <- reactive({
+#   as.vector(top_10()$Feature)
+# }) 
 
 
-#features --> and create the variable importance plot
-
-              
-                  
+#subsets a given dataframe so that it only includes the 10 most important factors, as determined through random forests
+rf.tops <- function(sample_df) {
   
+  top_f <- top_10()$Feature
+  
+  
+  new <-sample_df %>%
+    select(all_of(c(top_f)))
+  
+  #add back in the "y" outcome and the state column
+  new$y<-sample_df$two_week_outcome
+  new$state <- sample_df$State
+  new$date <- sample_df$Date
+  return(new)
+}
+
  
+train_data_glm <- reactive({
+  
+  rf.tops(train_data())
+  
+})
 
 
+test_data_glm <- reactive({
+  
+  rf.tops(test_data())
+})
+
+
+preds_data_glm <- reactive({
+  
+  rf.tops(preds_data())
+})
+
+
+
  
+
+#--------Beginning the GLMNET stuff
+
+
+geo_combine<- function(df){
+  geo <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/us-zip-code-latitude-and-longitude.csv", header= FALSE, stringsAsFactors = FALSE)
+  geo<- as.data.frame(geo)
+  geo<-geo%>% separate(V1, into=c("Zip", "City", "State", "Latitude","Longitude","Timezone","Daylight_savings", "geopoint"), sep=";" )
+  geo<- geo[-1,]
+  geo$Latitude<-as.numeric(geo$Latitude)
+  geo$Longitude<-as.numeric(geo$Longitude)
+  names(geo) <-tolower(names(geo))
+  
+  state_latLong <- geo%>%
+    group_by(state)%>%
+    summarise(latitude = mean(latitude, na.rm = TRUE),
+              longitude = mean(longitude, na.rm = TRUE))
+  
+  return(left_join(df, state_latLong, by='state'))
+}
+
+
+#add state longitude and latitude data to the training, testing, and predictions datasets
+datatrain_lm<- reactive({
+
+  geo_combine(train_data_glm())
+
+})
+datatest_lm<- reactive({
+  geo_combine(test_data_glm())
+
+})
+datapreds_lm <- reactive({
+
+  geo_combine(preds_data_glm())
+
+})
+
+
+
+cleaning_lm<- function(df){
+  #df1 <- df[, -which(names(df) %in% c("state"))]#%>% 
+  
+  df1 <- df %>% select(-c("state"))
+  
+  
+  #select(-1) #removing 'id'
+  col_idx <- grep("^y$", names(df1))
+  df1 <- df1[, c(col_idx, (1:ncol(df1))[-col_idx])]
+  
+  #dropping date, cannot create a poly w/ cbind() after polys created
+  date_hold<- as.data.frame(df1$date)
+  colnames(date_hold)<-"date"
+
+    drops<-c( "date") #droping 
+  df1<-df1[, -which(names(df1) %in% drops)]
+
+  feats<- function(xf, column_numbers) {
+    xf %>% 
+      mutate_at(vars(column_numbers), funs(sqr = (.)^2))%>%
+      mutate_at(vars(column_numbers), funs(cube =(.)^3))
+  }
+  end<-ncol(df1)
+  
+  #, two_week_forecast_date
+  return(cbind(feats(df1, 2:end), date_hold)) #do not include y or "id" in poly calcs
+}
+
+
+
+datatrain_poly<- reactive({
+  
+  cleaning_lm(datatrain_lm())
+
+}) 
+datatest_poly <- reactive({
+  
+  cleaning_lm(datatest_lm())
+  
+  
+})
+
+datapreds_poly<- reactive({
+  
+  cleaning_lm(datapreds_lm())
+  
+})
+
+
+#Creating the Model Matrices for the Glmnet model ---------------------------
+
+createGLM_modelmat <- function(poly_df) {
+  
+  glmnet_mat <- poly_df %>%
+    mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
+    model.matrix(object= ~ .-1, . , contrasts.arg =
+                   lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
+                          contrasts, contrasts = FALSE))
+
+    return(glmnet_mat)
+  
+}
+
+
+
+#model matrices for each of the different datasets (training, testing, and predictions)
+datatrain_glmnet <- reactive ({
+  
+  createGLM_modelmat(datatrain_poly())
+})
+
+
+datatest_glmnet <- reactive ({
+  
+  createGLM_modelmat(datatest_poly())
+})
+
+
+datapreds_glmnet <- reactive ({
+  
+  createGLM_modelmat(datapreds_poly())
+})
+
+
+#Training GLMNnet -------------------
+
+trainGLM_Model <- function(datatrain_glmnet) {
+  
+  train_glm <- glmnet(
+    x = datatrain_glmnet[,-1],
+    y = datatrain_glmnet[,1], relax = FALSE, nfolds= 3)
+  
+  return(train_glm)
+  
+}
+
+
+train_glm <- reactive({
+  
+  trainGLM_Model(datatrain_glmnet())
+})
+
+
+#Predicting with glmnet -------------------
+predictGLM_Model <- function(train_glm, new_data) {
+  
+  lamMin<- min(train_glm[["lambda"]])
+  
+  results<-predict(train_glm, 
+                newx= new_data[,-1], 
+                newy= new_data[,1], 
+                s = lamMin , 
+                interval="confidence")
+  
+
+    return(results)
+}
+
+test_set_predictions <- reactive({
+  
+  test <- predictGLM_Model(train_glm(), datatest_glmnet())
+  as.data.frame(test)
+})
+
+
+preds_set_predictions <- reactive({
+  
+  predictGLM_Model(train_glm(), datapreds_glmnet())
+})
+
+
+
+
+output$glmtest <- renderDataTable({
+  
+  
+  DT::datatable(data = datatrain_glmnet(),
+                rownames = FALSE, options = list(scrollX = T))
+  
+})
+
+
+
+
+
  
 
  #Model Building Page ---------------------------------------------------------------------
@@ -1035,24 +1280,8 @@ output$rand_for <- renderDataTable({
  })
 
  
- #creates the training dataset for the XGBoost model 
- createTrainSet <- function(forecast_data) {
-   
-   latest_date = max(forecast_data$Date)
-   
-   train = forecast_data[forecast_data$two_week_forecast_date <= (latest_date - 14), ]
-   
-   return(train)
- }
  
- #creates a reactive dataframe for the training data 
- train_data <- reactive ({
-   
-   createTrainSet(forecast_data())
-   
-   
- })
-
+ 
 
 
 trainXGBoost <- function(train_df) {
@@ -1136,49 +1365,6 @@ xgb_model_output <- eventReactive(input$runxgb, {
  })
  
  
- 
-# 
-#creates the test set
- createTestSet <- function(forecast_data) {
-
-   latest_date = max(forecast_data$Date)
-
-   test = forecast_data[(forecast_data$two_week_forecast_date <= latest_date) &
-                          (forecast_data$two_week_forecast_date > (latest_date - 14)), ]
-
-   return(test)
-
- }
-
-
-#creates a reactive dataframe for the test data
-test_data <- reactive ({
-
-   createTestSet(forecast_data())
-
-
- })
-
- #creates the predictions dataset
- createPredSet <- function(forecast_data) {
-
-   latest_date = max(forecast_data$Date)
-
-
-   pred = forecast_data[forecast_data$two_week_forecast_date > latest_date, ]
-
-   return(pred)
-
- }
-
- #creates a reactive dataframe for the predictions dataset
- preds_data <- reactive ({
-
-   createPredSet(forecast_data())
-
-
- })
-#  
 # #predictions using the different datasets 
 #  
  #Get predctions based on XGB mmodel
@@ -1198,9 +1384,8 @@ test_data <- reactive ({
    XGBpredictions(xgb_model_output(), test_data())
 
  })
-#  
-#  #test_data(), test_dat_preds()
-#  
+
+ 
  combinedObvsPredsDf <- function(test, predicted){
 
    #Create dataframe
@@ -1215,6 +1400,17 @@ test_data <- reactive ({
 
  }
 
+ 
+ output$testing <- renderDataTable({
+   
+   new_df <- combinedObvsPredsDf(test_data(), test_data_preds())
+   
+   
+   DT::datatable(data = new_df,
+                 rownames = FALSE, options = list(scrollX = T))
+   
+ })
+ 
  output$preds_vs_observed <- renderPlot({
 
    new_df <- combinedObvsPredsDf(test_data(), test_data_preds())
@@ -1226,7 +1422,11 @@ test_data <- reactive ({
      geom_point() +
      geom_abline() +
      xlab("Log(Observed)") +
-     ylab("Log(Predicted)")
+     ylab("Log(Predicted)") +
+       theme(axis.text = element_text(size = 16),
+             axis.title = element_text(size = 20, face = "bold"),
+             plot.title = element_text(size = 22, face = "bold"))
+     
 
 
 
@@ -1262,7 +1462,11 @@ test_data <- reactive ({
    
       ggplot(aes(x = Date, y = Outcome)) +
      
-       geom_point(aes(color = Pred_vs_Obs)) 
+       geom_point(aes(color = Pred_vs_Obs))  +
+     theme(axis.text = element_text(size = 16),
+           axis.title = element_text(size = 20, face = "bold"),
+           plot.title = element_text(size = 22, face = "bold"))
+   
    
    
  })
@@ -1311,7 +1515,11 @@ output$one_state_preds <- renderPlot({
     
     geom_point(aes(color = Pred_vs_Obs)) +
     
-    stat_smooth(method = 'lm', formula = y ~ poly(x,10), se = TRUE, color = "darkgrey")
+    stat_smooth(method = 'lm', formula = y ~ poly(x,10), se = TRUE, color = "darkgrey") +
+    theme(axis.text = element_text(size = 16),
+          axis.title = element_text(size = 20, face = "bold"),
+          plot.title = element_text(size = 22, face = "bold"))
+  
     
   
   
