@@ -12,7 +12,7 @@ library(shinydashboard)
 library(tidyverse)
 library(DT)
 # library(plotly) #used to create interactive plots
-#library(glmnet) # to perform L1 regularization
+library(glmnet) # to perform L1 regularization
 library(tidymodels)
 library(covidcast)
 library(lubridate)
@@ -20,13 +20,16 @@ library(randomForest)
 library(xgboost)
 library(caret)
 # add these libraries 
-libs = c("tidyverse","data.table","stargazer", "caret", "e1071", "splines",
-         "randomForest", "C50", "xgboost", "ggplot2", "cowplot", "forecast")
+# libs = c("tidyverse","data.table","stargazer", "caret", "e1071", "splines",
+#          "randomForest", "C50", "xgboost", "ggplot2", "cowplot", "forecast")
 
 
 #read in static datasets -- controls only and the sample user input data
 state_controls <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/state_controls.csv")
 user_input_example <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/user_input_policies_full_example.csv")
+
+merged_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
+
 
 #Dashboard Header & Title ---------------------------------------------------------
 header <- dashboardHeader(title = "Machine Learning Pipeline Visualization Using COVID-19 Data",
@@ -288,20 +291,23 @@ body <- dashboardBody(
             
             
             
-            #allows the user to decide how to create the training subset -----------------------------------
-            radioButtons(inputId = "train_decide",
-                         label = "How do you want to train your data?",
-                         choices = c("Time Ordered", "Random Shuffling"),
-                         selected = c("Random Shuffling")),
+            #TEMPORARILY displays the results of random forest
+            dataTableOutput(outputId = "rand_for"),
             
-            
-            #allows the user to decide how many features to include in their variable importance plot --------------
-            sliderInput(inputId = "num_feats",
-                        label = "How many features would you like to include?",
-                        min = 0,
-                        max = 5,
-                        value = 4),
-            
+            # #allows the user to decide how to create the training subset -----------------------------------
+            # radioButtons(inputId = "train_decide",
+            #              label = "How do you want to train your data?",
+            #              choices = c("Time Ordered", "Random Shuffling"),
+            #              selected = c("Random Shuffling")),
+            # 
+            # 
+            # #allows the user to decide how many features to include in their variable importance plot --------------
+            # sliderInput(inputId = "num_feats",
+            #             label = "How many features would you like to include?",
+            #             min = 0,
+            #             max = 5,
+            #             value = 4),
+            # 
             
             
             #adds visual space
@@ -312,13 +318,16 @@ body <- dashboardBody(
             
             br(),
             
+            
             #message to show label what is being displayed
             htmlOutput(outputId = "ft_sel"),
+            
+          
+            br(),
             
             
             #shows the variable importance plot
             plotOutput(outputId = "varImp"),
-            
             
             
             #display the ROC curves for the different methodologies used
@@ -343,6 +352,19 @@ body <- dashboardBody(
     #Model Building page ------------------------------------------------------------------------------
     tabItem("model",
      
+            
+            #Gives the user a message to describe the data table
+            htmlOutput(outputId = "forecast_table"),    
+            
+            br(),
+            
+            br(),
+            
+            #displays the two week forecast data
+            dataTableOutput(outputId = "forecast"),
+            
+            br(),
+            br(),
             
             #click to run the XGBoost model
             actionButton(inputId = "runxgb",
@@ -775,256 +797,15 @@ only_sel_ctrls <- reactive({
    
  })
 
-  
-  
-  #Feature Selection Page Output ---------------------------------------------------
-  
- output$ft_sel <- renderUI({
-   
-   HTML(paste("Here's The Results of Feature Selection:", "Here's a Variable Importance Plot:", sep = "<br/><br/>"))
-   
- })
- 
-#Pre-Processing the Data for Feature Selection ------------------------------------------------
-#creates a separate copy of the reactive dataset to deal with feature selection
-merged_dataset_feat_sel <- reactive({
-      merged_dataset()[, colSums(is.na(merged_dataset()))==0]
-  
-})
 
-
- # output$varImp  <- renderPlot({
- #   
- #  # merged_dataset_feat_sel() <- select(merged_dataset_feat_sel(), -X)
- #   
- #   #drops the unused levels in the feature variables in the dataset
- #   merged_dataset_feat_sel() <- droplevels(merged_dataset_feat_sel())
- #   
- #   # str(df)
- #   # 
- #   # 
- #   
- #   #renaming the outcome variable and the "other" race category for consistency 
- #   names(merged_dataset_feat_sel())[names(merged_dataset_feat_sel()) == "Outcome.Variable"] <- "y" #creating consitency 
- #   names(merged_dataset_feat_sel())[names(merged_dataset_feat_sel()) == "Other"] <- "Other_Race"  #"Other is not meaningful in output
- #   # 
- #   
- #   #reorder the dataframe so that the outcome column is the first column
- #   
- #   col_idx <- grep("y", names(merged_dataset_feat_sel()))
- #   merged_dataset_feat_sel() <- merged_dataset_feat_sel()[, c(col_idx, (1:ncol(merged_dataset_feat_sel()))[-col_idx])]
- #   
- #   #head(df)
- #   # 
- #   # 
- #   end <-ncol(merged_dataset_feat_sel())
- #   x <- merged_dataset_feat_sel()[,2:end]
- #   y <- merged_dataset_feat_sel()[,1]
- #   # 
- #   # 
- #   
- #   set.seed(10)
- #   bestmtry <- tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500)
- #   #print(bestmtry)
- #   bestmtry_var<- bestmtry[1,1]
- #   
- #   
- #   rf <- randomForest(y ~ ., mtry= bestmtry_var, 
- #                      data= merged_dataset_feat_sel)
- #   
- #   
- #   varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
- #              type=NULL, class=NULL, scale=TRUE, 
- #              main=deparse(substitute(rf))) 
- #   
- # })
- 
-
- # 
- # 
- # 
- # 
- # 
- # 
-  #choices = c("Time Ordered", "Random Shuffling"),
-  #for time ordered, would need to use top_n command 
-  # 
-  # overall_data <- exp_features %>% 
-  #   left_join(state_controls, by = c("state")) %>% 
-  #   mutate(submission_date = as.Date(submission_date, format = "%m/%d/%Y"))
-  # 
-  # #finding the last four data entries to filter the data into training and testing
-  # most_recent_weeks <- tail(unique(overall_data$submission_date),2)
-  # 
-  # overall_data_sub <- overall_data %>% 
-  #   filter(submission_date == most_recent_weeks[1] | submission_date == most_recent_weeks[2])
-  # 
-  # if(input$train_decide == "Random Shuffling") {
-  #   
-  #   
-  #   
-  #       #Step 1:
-  #       set.seed(2022)
-  # 
-  #       #shuffle the data
-  #       overall_data <- overall_data[sample(1:nrow(overall_data)),]
-  # 
-  #       #split into the training and testing, with 50% of the data in each group
-  #       train_index <- sample(1:nrow(covid_info), 0.5 * nrow(covid_info))
-  #       train_df <- covid_info[train_index,]
-  #   #     test_df <- covid_info[-train_index,]
-  # 
-  #     #removes submission date, state, total population, and the other outcome variables from the training dataset
-  #     train_subset <-
-  #       train_df %>%
-  #       select(-c(1,2,4,13,15,16))
-  # 
-  #     #creating the response vector and the covariates matrix
-  #     x <- model.matrix(new_cases_per_100k ~ . , train_subset)[,-1]
-  #     y <- train_subset$new_cases_per_100k
-  # 
-  #     #picking the best value for lambda
-  #     lasso_results <- cv.glmnet(x, y, alpha = 1)
-  # 
-  #     #lambda within one standard error of the lowest value of lambda
-  #     one_se_lambda <- lasso_results$lambda.1se
-  # 
-  # 
-  #     all_vars <- coef(lasso_results, s = one_se_lambda)
-  #     #determines which variables will have a non-zero coefficients
-  #     selected_vars <- rownames(all_vars)[all_vars[,1] != 0]
-  # 
-  
-  # }
-  # 
-  # else {
-  #   
-  # }
-  
-  
-  
-  
-  #     policy_subset <- reactive({
-  #         covid_info %>% 
-  #             rename("Closure of Bars" = bars_closed,
-  #                    "Closure of Daycare" = day_care_closed,
-  #                    "Closure of Restaurants" = restaurants_closed) %>% 
-  #             select(submission_date, input$policySelect)
-  #                   
-  #     })
-  #     
-  #     #subset of the dataset based on the users selections
-  #     covid_subset <- reactive({
-  #       covid_info %>% 
-  #         select(submission_date)
-  #     })
-  #     
-  #
-  #Step 1:
-  #     set.seed(2022)
-  # 
-  #     #shuffle the data
-  #     covid_info <- covid_info[sample(1:nrow(covid_info)),]
-  # 
-  #     #split into the training and testing, with 50% of the data in each group
-  #     train_index <- sample(1:nrow(covid_info), 0.5 * nrow(covid_info))
-  # 
-  #     train_df <- covid_info[train_index,]
-  #     test_df <- covid_info[-train_index,]
-  # 
-  #     #removes submission date, state, total population, and the other outcome variables from the training dataset
-  #     train_subset <-
-  #       train_df %>%
-  #       select(-c(1,2,4,13,15,16))
-  # 
-  #     #creating the response vector and the covariates matrix
-  #     x <- model.matrix(new_cases_per_100k ~ . , train_subset)[,-1]
-  #     y <- train_subset$new_cases_per_100k
-  # 
-  #     #picking the best value for lambda
-  #     lasso_results <- cv.glmnet(x, y, alpha = 1)
-  # 
-  #     #lambda within one standard error of the lowest value of lambda
-  #     one_se_lambda <- lasso_results$lambda.1se
-  # 
-  # 
-  #     all_vars <- coef(lasso_results, s = one_se_lambda)
-  #     #determines which variables will have a non-zero coefficients
-  #     selected_vars <- rownames(all_vars)[all_vars[,1] != 0]
-  # 
-  # # # 
-  #     
-  #     
-  #     output$intro <- renderText("The selected variables are:")
-  #      output$selected_vars <- renderText({
-  #        
-  #        
-  #     
-  #         results <- selected_vars[-1]
-  # # 
-  # #       results <- paste0("The variables that are the best predictors of ", input$outcome, " are: ", selected_vars)
-  # #       results
-  # })
-  # # 
-  # # 
-  # # 
-  # #     )
-  #     
-  #     output$lasso_results <- renderPlot({
-  #       
-  #run model with and without feature selection
-  #       
-  #       
-  #      
-  #       
-  #       
-  #       
-  #       #baseline plot
-  #      ggplot(covid_info, aes(x = as.Date(submission_date), y = new_deaths_per_100k)) +
-  #         geom_line() 
-  #       
-  #     })
-  #     
-  #     output$policy_table <- DT::renderDataTable({
-  # 
-  #         DT::datatable(data = policy_subset(),
-  #                       rownames = FALSE)
-  #     })
-  # 
-  #     output$policy_over_time <- renderPlot({
-  # 
-  #         ggplot(policy_subset(), aes(x = as.Date(submission_date), y = input$policySelect)) +
-  #             geom_line(color = "blue")
-  # 
-  # 
-  #     })
-  
-  
   
 
-#Model Building Page ---------------------------------------------------------------------
+#CREATING THE DATASETS USED FOR FORECASTING --------------------------------------------
  
- output$xgb_pls_wait <- renderUI({
-   
-   HTML(paste("Please wait while the XGBoost Model Runs...", sep = "<br/><br/>"))
-   
- })
- 
- output$display_model <- renderUI({
-   
-   HTML(paste("Here's the Model Specification for the Best Tuned XGBoost Model:", sep = "<br/><br/>"))
-   
- })
-
- 
- 
-#creates a new variable to capture the two-week forecast
-
+#function creates a new variable to capture the two-week forecast
  addTwoWeekForecast <- function(merged_df) {
    
-   #ungroups the data 
-   #merged_df <- merged_df %>% ungroup()
-   
+  
    #create a two week forecast variable
    original_df = merged_df %>% 
      mutate_at(c('Date'), ~ as.Date(., "%Y-%m-%d")) %>% 
@@ -1048,6 +829,8 @@ merged_dataset_feat_sel <- reactive({
  }
  
 
+ 
+
  #make a reactive data frame after the two week forecast has been added
  forecast_data <- reactive({
    
@@ -1056,12 +839,204 @@ merged_dataset_feat_sel <- reactive({
  })
  
  
+ 
+ #Feature Selection Page Output ---------------------------------------------------
+ 
+ output$ft_sel <- renderUI({
+   
+   HTML(paste("Here's The Results of Feature Selection:", "Here's a Variable Importance Plot:", sep = "<br/><br/>"))
+   
+ })
+ 
+ 
+ #RANDOM FOREST FEATURE SELECTION -----------------------------------
+ #creates a reactive dataframe for doing random forest
+ randfor_data <- reactive({
+   
+   #drops columns for random forest
+   drops <-c("Year", "Week","Date", "two_week_forecast_date") #droping 
+   
+   #drops columns that are in the above vector
+   df <- forecast_data()[, -which(names(forecast_data()) %in% drops)]
+   
+   
+   #changes the names of columns to help with the predictions to follow later
+   colnames(df)[which(names(df) == "covid_measure")] <- "two_week_backcast"
+   colnames(df)[which(names(df) == "two_week_outcome")] <- "y"
+   
+   
+   ##Moving Ouctome Variable to front of dataset for ease of splitting
+   col_idx <- grep("^y$", names(df))
+   
+   #reorganizes the dataframe so that 
+   df <- df[, c(col_idx, (1:ncol(df))[-col_idx])]
+   
+   
+   #replaces NA values in the two_week_outcome variable with NAs
+   df <- df %>%  drop_na(y)
+   
+ }) 
+ 
+#returns a data frame with the variable importances (according to node purity) after passing in the cleaned data for random forests
+randfor_model <- function(randfor_data) ({
+  
+  
+  #creates the x and y dataframes needed for random forests
+  end <- ncol(randfor_data)
+  x <- randfor_data[,2:end]
+  y <- randfor_data[,1]
+  
 
+  #tune the random forest model
+  set.seed(10)
+  bestmtry <- tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500)
+  bestmtry_var<- bestmtry[1,1]
+
+  
+  # rf = rand_forest(mode="regression") %>%
+  #   set_engine("randomForest") %>% 
+  #   fit(y ~ ., randfor_data) #removed RDATE variable because it has too many category
+  # 
+  # rf <- randomForest(y ~ ., mtry = bestmtry_var,
+  #                    data = randfor_data
+  # )
+  # 
+  # #extracts the variable importances
+  # features <- as.data.frame(rf$importance)
+  # features <- as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity")))
+
+  return(randfor_data$y)
+  
+})
+
+#DEBUGGINNG ---------------------------------------------------
+
+# forecast_data_ex <- addTwoWeekForecast(merged_ex)
+# 
+# #removes the "X" column
+# forecast_data_ex <- forecast_data_ex %>% select(-1)
+# 
+# 
+# 
+# #drops columns for random forest
+# drops <-c( "Year", "Week","Date", "two_week_forecast_date") #droping
+# 
+# #drops <-c( "Year", "Week") #droping
+# 
+# 
+# 
+# #drops columns that are in the above vector
+# df <- forecast_data_ex[, -which(names(forecast_data_ex) %in% drops)]
+# 
+# #changes the names of columns to help with the predictions to follow later
+# colnames(df)[which(names(df) == "covid_measure")] <- "two_week_backcast"
+# colnames(df)[which(names(df) == "two_week_outcome")] <- "y"
+# 
+# 
+# ##Moving Ouctome Variable to front of dataset for ease of splitting
+# col_idx <- grep("^y$", names(df))
+# 
+# #reorganizes the dataframe so that
+# df <- df[, c(col_idx, (1:ncol(df))[-col_idx])]
+# 
+# df <- df %>%  drop_na(y)
+# 
+
+# ex_features <- randfor_model(df)
+# 
+# 
+# #example of missingness
+# 
+# miss_ex <- check_missingness(df)
+# 
+
+#-------------------------------------------------------
+# 
+# output$varImp <- renderPlot({
+# 
+#   var_imp <- randfor_model(randfor_data())
+# 
+#   var_imp <- var_imp %>%
+#     transform(Feature = reorder(Feature, NodPurity))
+#   
+#   var_imp %>%
+#     ggplot(aes(x = Feature, y = NodPurity)) +
+#     geom_bar(stat = "identity") +
+#     coord_flip()
+# 
+# 
+#   var_imp %>%
+#   ggplot(aes(x = "Feature", y = "NodPurity")) +
+#   geom_bar(stat = "identity")
+# 
+# })
+# 
+
+
+output$rand_for <- renderDataTable({
+
+  var_imp <- randfor_model(randfor_data())
+
+  DT::datatable(data =  var_imp,
+                rownames = FALSE,
+                options = list(scrollX = T))
+})
+
+ 
+ # #Pre-Processing the Data for Feature Selection ------------------------------------------------
+
+ 
+ 
+ #forecast_data() #reactive data Frame that already includes the two week forecasted data
+ 
+ 
+ 
+ 
+ # #shows the variable importance plot
+ # plotOutput(outputId = "varImp"),
+ # 
+ # br(),
+ # 
+ # #message to show label what is being displayed
+ # htmlOutput(outputId = "ft_sel"),
+ # 
+ 
+
+ 
+
+
+
+#data cleaning for glmnet ------------------------------------
+
+
+#features --> and create the variable importance plot
+
+              
+                  
+  
+ 
 
 
  
+ 
+
+ #Model Building Page ---------------------------------------------------------------------
+ 
+ output$xgb_pls_wait <- renderUI({
+   
+   HTML(paste("Please wait while the XGBoost Model Runs...", sep = "<br/><br/>"))
+   
+ })
+ 
+ output$display_model <- renderUI({
+   
+   HTML(paste("Here's the Model Specification for the Best Tuned XGBoost Model:", sep = "<br/><br/>"))
+   
+ })
+
+ 
  #creates the training dataset for the XGBoost model 
- createXGBTrainSet <- function(forecast_data) {
+ createTrainSet <- function(forecast_data) {
    
    latest_date = max(forecast_data$Date)
    
@@ -1073,7 +1048,7 @@ merged_dataset_feat_sel <- reactive({
  #creates a reactive dataframe for the training data 
  train_data <- reactive ({
    
-   createXGBTrainSet(forecast_data())
+   createTrainSet(forecast_data())
    
    
  })
@@ -1119,6 +1094,23 @@ return(XGBModel)
 }
 
 
+
+#displays the title for the forecasting table that is to be displayed
+output$forecast_table <- renderUI({
+  
+  HTML(paste("Here's The Dataset Including the Two Week Forecasts:", sep = "<br/><br/>"))
+  
+})
+
+
+#displays the forecasted data
+output$forecast <- renderDataTable({
+  
+  DT::datatable(data = forecast_data(),
+                rownames = FALSE,
+                options = list(scrollX = T))
+})
+
 #creates the XGB model to be used by the later functions
 
 
@@ -1147,7 +1139,7 @@ xgb_model_output <- eventReactive(input$runxgb, {
  
 # 
 #creates the test set
- createXGBTestSet <- function(forecast_data) {
+ createTestSet <- function(forecast_data) {
 
    latest_date = max(forecast_data$Date)
 
@@ -1162,7 +1154,7 @@ xgb_model_output <- eventReactive(input$runxgb, {
 #creates a reactive dataframe for the test data
 test_data <- reactive ({
 
-   createXGBTestSet(forecast_data())
+   createTestSet(forecast_data())
 
 
  })
@@ -1339,6 +1331,7 @@ output$predictions_tabular <- renderDataTable({
   XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
   
   
+  
   #Summarise predictions by prediction week
   preds_all = data.frame(Prediction  = XGBPredsPred, Week = Week) %>%
     group_by(Week) %>% 
@@ -1374,6 +1367,14 @@ output$predictions_state_tabular <- renderDataTable({
                 rownames = FALSE, options = list(scrollX = T))
   
 })
+
+
+#Add charts and tables for the prediction comparison
+
+#report the RMSE
+
+#covid_dataset(), userdata(), state_controls
+
 
  
 }

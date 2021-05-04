@@ -68,7 +68,75 @@ colnames(working_df)[which(names(working_df) == "two_week_outcome")] <- "y"
 
 
 
+```{r}
+##Train/Test split 
+#n<-lm_feats%>% count() 
+#n<-as.numeric(n/2)
+#data2 = lm_feats[sample(1:nrow(lm_feats)),]  # permute rows
+
+
+#Create train set
+train_df = function(df) {
+  #Call addForecastCols function to create the outcome variable
+  #create variable for latest date for which two week covid measure is avaiable
+  latest_date = max(df$date)
+  #Create a training set - reserving the last two weeks with obvserved 
+  #two_week__outcome are reserved as a test set. 
+  train = df[df$two_week_forecast_date <= (latest_date - 14), ]
+  return(train)
+}
+
+  latest_date = max(glm_feats$date)
+  #Create a training set - reserving the last two weeks with obvserved 
+  #two_week__outcome are reserved as a test set. 
+  train = glm_feats[glm_feats$two_week_forecast_date <= (latest_date - 14), ]
+
+#Create test set
+test_df = function(df) {
+  #create variable for latest date for which two week covid measure is avaiable
+  latest_date = max(df$date)
+  #Create a test set - using the last two weeks for which two_week_outcom is observed. 
+  test = df[(df$two_week_forecast_date <= latest_date) &
+                      (df$two_week_forecast_date > (latest_date - 14)), ]
+  return(test)
+}
+
+
+#Create prediction set - for all states
+pred_df = function(df) {
+  #Call addForecastCols function to create the outcome variable
+  #create variable for latest date for which two week covid measure is avaiable
+  latest_date = max(df$date)
+  #Create a prediction set - using the  two weeks for which two_week_outcom is not observed. 
+  pred = df[df$two_week_forecast_date > latest_date +7, ]
+  return(pred)
+}
+
+
+
+
+```
+
+
+```{r}
+#glm_feats$date<-working_df$date   
+#glm_feats<- glm_feats%>% mutate_at(c('date'), ~ as.Date(., "%Y-%m-%d"))
+#glm_feats$glm_feats$two_week_forecast_date <- working_df$
+
+#forecast_col<-addForecastCols(glm_feats)
+datatrain<-train_df(working_df)
+datatest<-test_df(working_df)
+datapreds<- pred_df(working_df)
+
+drops<-c("year","week","two_week_forecast_date")
+
+#datatest$two_week_forecast_date
+datatrain <-datatrain[, -which(names(datatrain) %in% drops)]
+datatest <- datatest[, -which(names(datatest) %in% drops)]
+datapreds <- datapreds[, -which(names(datapreds) %in% drops)]
 #datacleaning for randomforest 
+```
+
 
 ```{r}
 
@@ -101,7 +169,6 @@ The following is tuning the number of varaibles reandomple sampled as candiate a
 set.seed(10)
 bestmtry <- tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500)
 print(bestmtry)
-
 bestmtry_var<- bestmtry[1,1]
 
 ```
@@ -109,36 +176,46 @@ bestmtry_var<- bestmtry[1,1]
 
 ```{r}
 
-rf <- randomForest(y ~ ., mtry= bestmtry_var, 
-  data=working_df
-)
+r.forest <- function(working_df){
+  rf <- randomForest(y ~ ., mtry= bestmtry_var, 
+  data=working_df)
 
-#change to GGplot 
-rf$importance
-
-varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
+  varImpPlot(rf,sort=TRUE, n.var=min(10, nrow(rf$importance)),
            type=NULL, class=NULL, scale=TRUE, 
            main=deparse(substitute(rf))) 
+  
+  features <- as.data.frame(rf$importance)
+  features <-as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity"))) 
+  top<- top_n(features, 10, features$NodPurity)
+  top_f<-as.vector(top$Feature)
 
-### GLM
-features <- as.data.frame(rf$importance)
-features <-as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity"))) 
-
-top<- top_n(features, 10, features$NodPurity)
-#toplist<- as.list(top$Feature) #list variable did not work in gam
-
-#one<- as.character(top[1,1])
-top_f<-as.vector(top$Feature)
-
-
-new<-working_df%>%
-select(one_of(c(top_f)))
-
-new$y<-working_df$y
+  return(top_f)
+}
+ 
 
 
+
+rf.tops <-function(sample_df, top_f){
+  new<-sample_df%>%
+  select(all_of(c(top_f)))
+  
+  new$y<-sample_df$y
+
+  return(new)
+
+}
 
 #glment select levels of sparcity....  
+
+```
+
+```{r}
+
+tops <-r.forest(working_df)
+
+datatrain<-rf.tops(datatrain, tops)
+datatest<-rf.tops(datatest,tops)
+datapreds<- rf.tops(datapreds,tops)
 
 ```
 
@@ -154,7 +231,7 @@ Process needed to create 2D for 'state' to be incorporated into GLM with poly op
 ```{r}
 
 #setwd("~/GitHub/Covid-19-Closure-Impact/Data")
-
+geo_join<- function(df){
 geo<- read.csv('us-zip-code-latitude-and-longitude.csv', header= FALSE, stringsAsFactors = FALSE)
 
 geo<- as.data.frame(geo)
@@ -172,66 +249,61 @@ state_latLong <- geo%>%
   group_by(state)%>%
   summarise(latitude = mean(latitude, na.rm = TRUE),
             longitude = mean(longitude, na.rm = TRUE))
-
+  return(left_join(df, state_latLong, by='state'))
+}
 ```
+
 
 #Joining Long/Lat data and selected features
 ```{r}
 # this step should be moved to data cleaning, ask if their data is by state or county, county can be a direct match to the original dataset 
-features<- left_join(new, state_latLong, by='state')
+datatrain_lm<- geo_join(datatrain)
+datatest_lm<- geo_join(datatest)
+datapreds_lm<-geo_join(datapreds)
 #id<-rownames(features)
 #features<-cbind(id=id, features)
 
 ```
 
+
+#cleaning on test/train/ preds 
 ```{r}
-features1<-features[, -which(names(features) %in% c("state"))]#%>% 
+
+cleaning_lm<- function(df){
+df1<-df[, -which(names(df) %in% c("state"))]#%>% 
   #select(-1) #removing 'id'
 
-##need to undo this at the end
-
-col_idx <- grep("^y$", names(features1))
-features1 <- features1[, c(col_idx, (1:ncol(features1))[-col_idx])]
-head(features1)
+col_idx <- grep("^y$", names(df1))
+df1 <- df1[, c(col_idx, (1:ncol(df1))[-col_idx])]
 
 #dropping date, cannot create a poly w/ cbind() after polys created
-date_hold<- as.data.frame(features1$date)
+date_hold<- as.data.frame(df1$date)
+colnames(date_hold)<-"date"
 #two_week_forecast_date<-as.data.frame(features1$two_week_forecast_date)
 drops<-c( "date") #droping 
-features1<-features1[, -which(names(features1) %in% drops)]
+df1<-df1[, -which(names(df1) %in% drops)]
 
- feat_v2 <- function(df, column_numbers) {
+ feats<- function(xf, column_numbers) {
 
-   df %>% 
+   xf %>% 
     mutate_at(vars(column_numbers), funs(sqr = (.)^2))%>%
    mutate_at(vars(column_numbers), funs(cube =(.)^3))
-}
-
-
- 
+   }
 end<-ncol(features1)
 
 #, two_week_forecast_date
-glm_feats<-cbind(feat_v2(features1, 2:end), date_hold) #do not include y or "id" in poly calcs
-
+return(cbind(feats(df1, 2:end), date_hold)) #do not include y or "id" in poly calcs
+}
 #one<- as.character(top[1,1])
 
 #typeof(features1$two_week_prior)
 
 ```
 
-
-###CV Glmnet 
-
 ```{r}
-##Train/Test split 
-n<-glm_feats%>% count() 
-n<-as.numeric(n/2)
-data2 = glm_feats[sample(1:nrow(glm_feats)),]  # permute rows
-
-datatrain = data2[(1:n),]
-datatest = data2[-(1:n),]
-
+datatrain_poly<- cleaning_lm(datatrain_lm)
+datatest_poly<- cleaning_lm(datatest_lm)
+datapreds_poly<-cleaning_lm(datapreds_lm)
 
 ```
 
@@ -239,119 +311,49 @@ datatest = data2[-(1:n),]
 ##Glmnet 
 ```{r}
 
-datatrain[is.na(datatrain)] <-0
+datatrain_glmnet<- datatrain_poly %>%
+mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
+model.matrix(object= ~ .-1, . , contrasts.arg =
+                                                 lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
+                                                        contrasts, contrasts = FALSE))
 
-train_glm<- cv.glmnet(
-  x = datatrain %>% select(-y) %>% as.matrix(),
-  y = datatrain$y %>% as.matrix(), relax = FALSE)
+datatest_glmnet<- datatest_poly %>%
+mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
+model.matrix(object= ~ .-1, . , contrasts.arg =
+                                                                lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
+                                                        contrasts, contrasts = FALSE))
 
-i <- which(train_glm$lambda == train_glm$lambda.min)
-mse.min <- train_glm$cvm[i]
+datapreds_glmnet<- datapreds_poly%>%
+mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
+model.matrix(object= ~ .-1, . , contrasts.arg =
+                                                                lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
+                                                        contrasts, contrasts = FALSE))
 
 
-glm_preds <-predict(train_glm, newx = datatest %>% select(-y, -id)%>% as.matrix(), newy= datatest$y)
 
-combo<- as.data.frame(cbind(glm_preds, datatest$y))
-combo<-combo%>%
-  rename(Preds='1', 
-         Original = V2)
+train_glm<- glmnet(
+  x = datatrain_glmnet[,-1],
+  y = datatrain_glmnet[,1], relax = FALSE, nfolds= 3)
 
+
+plot(train_glm)
+
+lamMin<- min(train_glm[["lambda"]])
+
+test<-predict(train_glm, newx= datatest_glmnet[,-1], newy=datatest_glmnet[,1], s = lamMin , interval="confidence")
+
+preds<- predict(train_glm, newx= datapreds_glmnet[,-1], newy=datapreds_glmnet[,1], s = lamMin , interval="confidence")
 ```
-
+#RMSE testing 
 ```{r}
 
-plot(glm_preds)
-plot(glm_preds,xvar="lambda",label=TRUE)
+test<- as.data.frame(test) 
+glm_test<- as.data.frame(datatest_glmnet)
+preds_act<- cbind(test, glm_test$y)
+
+
+RMSE_glm<- sqrt(mean(preds_act[,2]-preds_act[,1])^2)
+
+
 
 ```
-
-
-```{r}
-
-plot(combo)
-
-combo$Error_abs <-100*abs(combo$Original - combo$Preds)/combo$Original
-
-combo$MSE<-(combo$Original - combo$Preds)^2 
-
-mean(combo$MSE)
-mean(combo$Error_abs)
-
-ggplot(combo, aes(x=Error_abs)) + geom_boxplot()
-ggplot(combo, aes(x=MSE)) + geom_boxplot()
-
-```
-
-
-#df1 = df %>%
-# mutate_if(is.character, as.factor) #%>% 
-#mutate_if(is.factor, forcats::fct_lump_min, min=100) 
-#df1$new_cases<- as.factor(df1$new_cases)
-
-t<- as.numeric(count(df)*.75)
-
-set.seed(12345) 
-df2 = df[sample(1:nrow(df)),]
-train = df2[1:t,]
-test = df2[-(1:t),]
-
-
-control <- trainControl(method="repeatedcv", number=10, repeats=3, search="grid")
-set.seed(seed)
-tunegrid <- expand.grid(.mtry=c(1:15))
-rf_gridsearch <- train(Class~., data=dataset, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control)
-print(rf_gridsearch)
-plot(rf_gridsearch)
- 
-
-
-####GAM not used
-
-#Week and state and year
-
-gam_mod<-gam(y ~ s(new[,1])+ s(new[,5])+ s(new[,6])+ s(new[,7]) + s(new[,8])+s(new[,4]), data=new)
-
-summary(gam_mod)
-vis.gam(gam_mod)
-
-futureVal <-predict(gam_mod, n.ahead = 2)
-#https://m-clark.github.io/generalized-additive-models/application.html#multiple-predictors
-#pruning random forest 
-
-
-ob_v_pred_test_plot = ggplot(combo, aes(x = Preds, y = Original)) +
-  geom_point() +
-  geom_abline()
-
-
-ob_v_pred_test_plot #way over estimating 
-
-
-
-# https://gist.github.com/gunthergl/bc1202b93b672e384c77da9b3769b91d was not able to implement this graphics
-
-##GAM Viz
-
-futureVal <-predict(gam_mod, n.ahead = 2) 
-
-pred_week <- df$Week
-
-preddata = data.frame(Week = seq(.4, 1, length = 100),
-                      Edu = mean(mod_gam2$model$Edu),
-                      Health = mean(mod_gam2$model$Health))
-
-futureVal <-predict(fit, n.ahead = 168)
-
-fits = predict(mod_gam2, newdata=testdata, type='response', se=T)
-predicts = data.frame(testdata, fits) %>% 
-  mutate(lower = fit - 1.96*se.fit,
-         upper = fit + 1.96*se.fit)
-
-plot_mod_gam2_response = ggplot(aes(x=Income,y=fit), data=predicts) +
-  geom_ribbon(aes(ymin = lower, ymax=upper), fill='gray90') +
-  geom_line(color='#00aaff') +
-  theme_trueMinimal()
-
-
-
-
