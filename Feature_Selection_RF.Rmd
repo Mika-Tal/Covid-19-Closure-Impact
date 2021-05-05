@@ -88,17 +88,13 @@ train_df = function(df) {
   return(train)
 }
 
-<<<<<<< HEAD
+
   latest_date = max(working_df$date)
   #Create a training set - reserving the last two weeks with obvserved 
   #two_week__outcome are reserved as a test set. 
   train = working_df[working_df$two_week_forecast_date <= (latest_date - 14), ]
-=======
-  latest_date = max(df$date)
-  #Create a training set - reserving the last two weeks with obvserved 
-  #two_week__outcome are reserved as a test set. 
-  train = df[df$two_week_forecast_date <= (latest_date - 14), ]
->>>>>>> 029a6e4f06346400a4b34657ec2444de3744d7a2
+
+  
 
 #Create test set
 test_df = function(df) {
@@ -305,18 +301,11 @@ df1<-df1[, -which(names(df1) %in% drops)]
 
    feats<- function(xf, column_numbers) {
 
-<<<<<<< HEAD
    xf %>% 
     mutate_at(vars(column_numbers), funs(sqr = (.)^2))%>%
    mutate_at(vars(column_numbers), funs(cube =(.)^3))
    }
-=======
-    xf %>% 
-     mutate_at(vars(column_numbers), funs(sqr = (.)^2))%>%
-     mutate_at(vars(column_numbers), funs(cube =(.)^3))
-     }
- 
->>>>>>> 029a6e4f06346400a4b34657ec2444de3744d7a2
+
 end<-ncol(df1)
 
 #, two_week_forecast_date
