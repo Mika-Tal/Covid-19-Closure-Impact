@@ -20,6 +20,7 @@ library(randomForest)
 library(xgboost)
 library(caret)
 library(fuzzyjoin)
+library(maps)
 # add these libraries 
 # libs = c("tidyverse","data.table","stargazer", "caret", "e1071", "splines",
 #          "randomForest", "C50", "xgboost", "ggplot2", "cowplot", "forecast")
@@ -28,9 +29,12 @@ library(fuzzyjoin)
 #read in static datasets -- controls only and the sample user input data
 state_controls <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/state_controls.csv")
 user_input_example <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/user_input_policies_full_example.csv")
-#geo <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/us-zip-code-latitude-and-longitude.csv", header= FALSE, stringsAsFactors = FALSE)
 
-merged_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
+
+final_preds <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/final_preds.csv")
+preds_act <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/preds_act.csv")
+
+#merged_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
 
 
 #Dashboard Header & Title ---------------------------------------------------------
@@ -422,11 +426,38 @@ body <- dashboardBody(
     
     tabItem("model_2",
             
-            dataTableOutput(outputId = "glmtest"),
+            
+            # dataTableOutput(outputId = "set1"),
+            # 
+            # dataTableOutput(outputId = "set2"),
+            # 
+            # dataTableOutput(outputId = "set3"),
+            # 
+            # dataTableOutput(outputId = "set4"),
+            # 
+            # dataTableOutput(outputId = "glmtest"),
+            # 
+           
+  
+            
+            # br(),
+            # 
+            # br(),
+            
+            plotOutput(outputId = "final_preds"),
             
             br(),
             
-            br()
+            br(),
+            
+            plotOutput(outputId = "preds_act"),
+            
+            
+            br(),
+            
+            br(),
+            
+            plot(outputId = "outcome_all")
             
     ),
     
@@ -598,983 +629,1162 @@ server <- function(input, output) {
   })
   
   
-  # Data Merging Page Output ---------------------------------------------------------
-  # covid_dataset()
-  # userdata()
-  # state_controls 
-  
-  output$merged <- renderUI({
-    
-    HTML(paste("Here's Your Merged Dataset:", sep = "<br/><br/>"))
-    
-  })
-  
-  merge_dataset_fun <- function(covid_data, user_data = NULL, control_data = NULL){
-    
-    
-    if(is.null(user_data) & !is.null(control_data)) {
-      merged <- covid_data %>% 
-        left_join(control_data, by = c("State" = "State"))
-      
-      return(merged)
-    }
-    
-    #If the user does not want to use our control data, then return merged covid and user data only
-    else if(!is.null(user_data) & is.null(control_data))  {
-      merged <- covid_data %>% 
-        left_join(user_data, by = c("State","Year", "Week"), all.x = TRUE)
-      
-      return(merged)
-      
-    }
-    
-    #if the user wants to add = covid data + their own uploaded data + all or a selection of our controls
-    else if (!is.null(control_data) & !is.null(user_data)){
-      
-      #join the covid data to the state controls data by joining on state
-      merged <- covid_data %>%
-        left_join(control_data, by = c("State" = "State"))
-      
-      merged <- left_join(merged, user_data,  by=c("State","Year", "Week"), all.x = TRUE)
-      
-      
-      return(merged)
-    }
-    
-    
-  }
-  
-  #creates a reactive dataframe including only the control features that the user selects
-  only_sel_ctrls <- reactive({
-    state_controls %>% 
-      select(State, all_of(input$select_controls))
-    
-  })
-  
-  merged_dataset <- eventReactive(input$click_merge, {
-    
-    
-    if(input$merge_decide == "No" & is.null(userdata())) {
-      
-      dat <- covid_dataset()
-    }
-    
-    else if(input$merge_decide == "No" & !is.null(userdata())) {
-      
-      merge_dataset_fun(covid_data = covid_dataset(), user_data = userdata())
-      
-    }
-    
-    else if(input$merge_decide == "Yes" & input$all_controls == "Yes" & !is.null(userdata())) {
-      
-      merge_dataset_fun(covid_dataset(), userdata(), state_controls)
-      
-    }
-    
-    #if the user didn't upload any data
-    else if(input$merge_decide == "Yes" & input$all_controls == "Yes" & is.null(userdata()) ) {
-      
-      merge_dataset_fun(covid_data = covid_dataset(), control_data = state_controls)
-      
-    }
-    
-    #if the user only wants to use a selection of our control features
-    else if(input$merge_decide == "Yes" & input$all_controls == "No" & !is.null(userdata())) {
-      
-      merge_dataset_fun(covid_dataset(), userdata(), only_sel_ctrls())
-      
-    }
-    
-    #if the user didn't upload any data
-    else if(input$merge_decide == "Yes" & input$all_controls == "No" & is.null(userdata()) ) {
-      
-      merge_dataset_fun(covid_data = covid_dataset(), control_data = only_sel_ctrls())
-      
-    }
-    
-  })
-  
-  
-  output$display_merged_data <- renderDataTable({
-    
-    DT::datatable(data = merged_dataset(),
-                  rownames = FALSE,
-                  options = list(scrollX = T))
-    
-  })
-  
-  
-  #Missingness Imputation Page Output ---------------------------------------------
-  
-  
-  check_missingness <- function(merged_df ){
-    missing_percentages_df = colSums(is.na(merged_df)) %>% 
-      tibble(name=names(.), percent_missing=. * (1/nrow(merged_df)) * 100) %>% 
-      select(name, percent_missing) %>% 
-      
-      #formats the percent missing nicely
-      mutate(percent_missing = round(percent_missing, digits = 2)) %>% 
-      arrange(desc(percent_missing)) %>%
-      as.data.frame()
-    
-    
-    return(missing_percentages_df)
-  }
-  
-  
-  
-  #This function takes two arguments, first is the merged dataset (dataframe) and second is the user
-  # choice on wether to drop columns with missing data or drop rows or just impute missing values
-  handle_missingness <- function(merged_df , choice){
-    
-    #make necessary data type changes
-    miss_df <- merged_df %>%
-      ungroup() %>%
-      mutate_if(is.character, as.factor) %>% 
-      mutate_if(is.Date, as.factor)
-    
-    
-    if (choice == "Impute missing values"){
-      imputer_recipe = 
-        miss_df %>%
-        recipe(formula = "~ . - covid_measure") %>%
-        step_knnimpute(all_predictors(),neighbors = 1)
-      
-      merged_imputed_df = prep(imputer_recipe) %>%
-        bake(new_data = miss_df)
-    }
-    
-    if (choice == "Drop rows with missing values"){
-      merged_imputed_df <- merged_df[rowSums(is.na(merged_df)) <= 0,]
-      
-    }
-    if (choice == "Delete features with missing values"){
-      merged_imputed_df <- merged_df %>%  select_if(~ !any(is.na(.)))
-      
-    }
-    
-    return(merged_imputed_df)
-    
-    
-  }
-  
-  
-  output$no_miss_mess <- renderUI({
-    
-    HTML(paste("Here's The Amount of Missingness in the Data:", sep = "<br/><br/>"))
-    
-  })
-  
-  
-  #displays the new dataset after addressing potential missingnes in the dataset
-  output$missing_stats <- renderDataTable({
-    
-    merged_df <- merged_dataset()
-    miss_stats_df <- check_missingness(merged_df)
-    
-    DT::datatable(data = miss_stats_df,
-                  rownames = FALSE,
-                  options = list(scrollX = T))
-    
-  })
-  
-  
-  #displays the dataset after missingness has been dealt with, according to the "handle_missingness" function
-  
-  #new dataset after missingness has been handled
-  data_after_missing <- reactive({
-    handle_missingness(merged_dataset(), input$handle_missingness)
-  })
-  
-  output$data_aft_missing <- renderDataTable({
-    
-    merged_df <- merged_dataset()
-    df_aft_miss <- data_after_missing()
-    DT::datatable(data = df_aft_miss,
-                  rownames = FALSE,
-                  options = list(scrollX = T))
-    
-    
-  })
-  
-  
-  
-  
-  #CREATING THE DATASETS USED FOR FORECASTING --------------------------------------------
-  
-  #function creates a new variable to capture the two-week forecast
-  addTwoWeekForecast <- function(merged_df) {
-    
-    
-    #create a two week forecast variable
-    original_df = merged_df %>% 
-      mutate_at(c('Date'), ~ as.Date(., "%Y-%m-%d")) %>% 
-      mutate(two_week_forecast_date = Date + 14) %>% 
-      mutate_if(is.character, as.factor) 
-    
-    #map the two week forecast variable to the outcome variable in two weeks
-    twoWeek_df = original_df %>%
-      select(Date, State, covid_measure) %>%
-      rename(two_week_outcome = covid_measure,
-             two_week_forecast_date = Date)
-    
-    
-    #combine the original dataframe with the new dataframe with the two week forecast
-    working_df = original_df %>%
-      left_join(twoWeek_df,
-                by = c("State" = "State",
-                       "two_week_forecast_date" = "two_week_forecast_date"))
-    
-    return(working_df)
-  }
-  
-  
-  
-  
-  #make a reactive data frame after the two week forecast has been added
-  forecast_data <- reactive({
-    
-    addTwoWeekForecast(data_after_missing()) 
-    
-  })
-  
-  
-  
-  #Feature Selection Page Output ---------------------------------------------------
-  
-  output$ft_sel <- renderUI({
-    
-    HTML(paste("Here's The Results of Feature Selection:", "Here's a Variable Importance Plot:", sep = "<br/><br/>"))
-    
-  })
-  
-  
-  #RANDOM FOREST FEATURE SELECTION -----------------------------------
-  #creates a reactive dataframe for doing random forest
-  randfor_data <- reactive({
-    
-    #drops columns for random forest
-    drops <-c("Year", "Week", "Date", "two_week_forecast_date") #droping 
-    
-    #drops columns that are in the above vector
-    df <- forecast_data()[, -which(names(forecast_data()) %in% drops)]
-    
-    
-    #changes the names of columns to help with the predictions to follow later
-    colnames(df)[which(names(df) == "covid_measure")] <- "two_week_backcast"
-    colnames(df)[which(names(df) == "two_week_outcome")] <- "y"
-    
-    
-    ##Moving Ouctome Variable to front of dataset for ease of splitting
-    col_idx <- grep("^y$", names(df))
-    
-    #reorganizes the dataframe so that 
-    df <- df[, c(col_idx, (1:ncol(df))[-col_idx])]
-    
-    
-    #replaces NA values in the two_week_outcome variable with NAs
-    df <- df %>%  drop_na(y)
-    
-  }) 
-  
-  
-  bestmtry <- function(randfor_data) ({
-    
-    #creates the x and y dataframes needed for random forests
-    end <- ncol(randfor_data)
-    x <- randfor_data[,2:end]
-    y <- randfor_data[,1]
-    
-    
-    #tune the random forest model
-    set.seed(10)
-    bestmtry <- as.data.frame(tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500))
-    bestmtry_var<- bestmtry[which(bestmtry$OOBError == min(bestmtry$OOBError)),1]
-    
-    
-    return(bestmtry_var)
-    
-  })
-  
-  
-  
-  
-  #returns a data frame with the variable importances (according to node purity) after passing in the cleaned data for random forests
-  randfor_model <- function(randfor_data, bestmtry) ({
-    
-    rf <- randomForest(y ~ ., mtry = bestmtry, data = randfor_data)
-    
-    #extracts the variable importances
-    features <- as.data.frame(rf$importance)
-    features <- as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity")))
-    
-    
-    #extracts the top 10 features with the highest node purity values
-    top <- top_n(features, 10, features$NodPurity)
-    
-    
-    return(top)
-    
-  })
-  
-  #gets the top 10 features from the variable importance plot after random forests has been run
-  
-  top_10 <- reactive({
-    
-    mtry <- 12
-    randfor_model(randfor_data(), mtry)
-    
-  }) 
-  
-  
-  output$varImp <- renderPlot({
-    
-    #mtry  <- ncol(randfor_data())/3
-    #  mtry <- 12
-    #mtry <- bestmtry(randfor_data())
-    #var_imp <- randfor_model(randfor_data(), mtry)
-    var_imp <- top_10()
-    
-    var_imp <- var_imp %>%
-      transform(Feature = reorder(Feature, NodPurity))
-    
-    var_imp %>%
-      ggplot(aes(x = Feature, y = NodPurity)) +
-      geom_bar(stat = "identity") +
-      labs(title = "Variable Importance Plot", y = "Node Purity") +
-      coord_flip() +
-      theme(axis.text = element_text(size = 16),
-            axis.title = element_text(size = 20, face = "bold"),
-            plot.title = element_text(size = 22, face = "bold"))
-    
-    
-  })
-  
-  
-  
-  # output$rand_for <- renderDataTable({
+#   # Data Merging Page Output ---------------------------------------------------------
+#   # covid_dataset()
+#   # userdata()
+#   # state_controls 
+#   
+#   output$merged <- renderUI({
+#     
+#     HTML(paste("Here's Your Merged Dataset:", sep = "<br/><br/>"))
+#     
+#   })
+#   
+#   merge_dataset_fun <- function(covid_data, user_data = NULL, control_data = NULL){
+#     
+#     
+#     if(is.null(user_data) & !is.null(control_data)) {
+#       merged <- covid_data %>% 
+#         left_join(control_data, by = c("State" = "State"))
+#       
+#       return(merged)
+#     }
+#     
+#     #If the user does not want to use our control data, then return merged covid and user data only
+#     else if(!is.null(user_data) & is.null(control_data))  {
+#       merged <- covid_data %>% 
+#         left_join(user_data, by = c("State","Year", "Week"), all.x = TRUE)
+#       
+#       return(merged)
+#       
+#     }
+#     
+#     #if the user wants to add = covid data + their own uploaded data + all or a selection of our controls
+#     else if (!is.null(control_data) & !is.null(user_data)){
+#       
+#       #join the covid data to the state controls data by joining on state
+#       merged <- covid_data %>%
+#         left_join(control_data, by = c("State" = "State"))
+#       
+#       merged <- left_join(merged, user_data,  by=c("State","Year", "Week"), all.x = TRUE)
+#       
+#       
+#       return(merged)
+#     }
+#     
+#     
+#   }
+#   
+#   #creates a reactive dataframe including only the control features that the user selects
+#   only_sel_ctrls <- reactive({
+#     state_controls %>% 
+#       select(State, all_of(input$select_controls))
+#     
+#   })
+#   
+#   merged_dataset <- eventReactive(input$click_merge, {
+#     
+#     
+#     if(input$merge_decide == "No" & is.null(userdata())) {
+#       
+#       dat <- covid_dataset()
+#     }
+#     
+#     else if(input$merge_decide == "No" & !is.null(userdata())) {
+#       
+#       merge_dataset_fun(covid_data = covid_dataset(), user_data = userdata())
+#       
+#     }
+#     
+#     else if(input$merge_decide == "Yes" & input$all_controls == "Yes" & !is.null(userdata())) {
+#       
+#       merge_dataset_fun(covid_dataset(), userdata(), state_controls)
+#       
+#     }
+#     
+#     #if the user didn't upload any data
+#     else if(input$merge_decide == "Yes" & input$all_controls == "Yes" & is.null(userdata()) ) {
+#       
+#       merge_dataset_fun(covid_data = covid_dataset(), control_data = state_controls)
+#       
+#     }
+#     
+#     #if the user only wants to use a selection of our control features
+#     else if(input$merge_decide == "Yes" & input$all_controls == "No" & !is.null(userdata())) {
+#       
+#       merge_dataset_fun(covid_dataset(), userdata(), only_sel_ctrls())
+#       
+#     }
+#     
+#     #if the user didn't upload any data
+#     else if(input$merge_decide == "Yes" & input$all_controls == "No" & is.null(userdata()) ) {
+#       
+#       merge_dataset_fun(covid_data = covid_dataset(), control_data = only_sel_ctrls())
+#       
+#     }
+#     
+#   })
+#   
+#   
+#   output$display_merged_data <- renderDataTable({
+#     
+#     DT::datatable(data = merged_dataset(),
+#                   rownames = FALSE,
+#                   options = list(scrollX = T))
+#     
+#   })
+#   
+#   
+#   #Missingness Imputation Page Output ---------------------------------------------
+#   
+#   
+#   check_missingness <- function(merged_df ){
+#     missing_percentages_df = colSums(is.na(merged_df)) %>% 
+#       tibble(name=names(.), percent_missing=. * (1/nrow(merged_df)) * 100) %>% 
+#       select(name, percent_missing) %>% 
+#       
+#       #formats the percent missing nicely
+#       mutate(percent_missing = round(percent_missing, digits = 2)) %>% 
+#       arrange(desc(percent_missing)) %>%
+#       as.data.frame()
+#     
+#     
+#     return(missing_percentages_df)
+#   }
+#   
+#   
+#   
+#   #This function takes two arguments, first is the merged dataset (dataframe) and second is the user
+#   # choice on wether to drop columns with missing data or drop rows or just impute missing values
+#   handle_missingness <- function(merged_df , choice){
+#     
+#     #make necessary data type changes
+#     miss_df <- merged_df %>%
+#       ungroup() %>%
+#       mutate_if(is.character, as.factor) %>% 
+#       mutate_if(is.Date, as.factor)
+#     
+#     
+#     if (choice == "Impute missing values"){
+#       imputer_recipe = 
+#         miss_df %>%
+#         recipe(formula = "~ . - covid_measure") %>%
+#         step_knnimpute(all_predictors(),neighbors = 1)
+#       
+#       merged_imputed_df = prep(imputer_recipe) %>%
+#         bake(new_data = miss_df)
+#     }
+#     
+#     if (choice == "Drop rows with missing values"){
+#       merged_imputed_df <- merged_df[rowSums(is.na(merged_df)) <= 0,]
+#       
+#     }
+#     if (choice == "Delete features with missing values"){
+#       merged_imputed_df <- merged_df %>%  select_if(~ !any(is.na(.)))
+#       
+#     }
+#     
+#     return(merged_imputed_df)
+#     
+#     
+#   }
+#   
+#   
+#   output$no_miss_mess <- renderUI({
+#     
+#     HTML(paste("Here's The Amount of Missingness in the Data:", sep = "<br/><br/>"))
+#     
+#   })
+#   
+#   
+#   #displays the new dataset after addressing potential missingnes in the dataset
+#   output$missing_stats <- renderDataTable({
+#     
+#     merged_df <- merged_dataset()
+#     miss_stats_df <- check_missingness(merged_df)
+#     
+#     DT::datatable(data = miss_stats_df,
+#                   rownames = FALSE,
+#                   options = list(scrollX = T))
+#     
+#   })
+#   
+#   
+#   #displays the dataset after missingness has been dealt with, according to the "handle_missingness" function
+#   
+#   #new dataset after missingness has been handled
+#   data_after_missing <- reactive({
+#     handle_missingness(merged_dataset(), input$handle_missingness)
+#   })
+#   
+#   output$data_aft_missing <- renderDataTable({
+#     
+#     merged_df <- merged_dataset()
+#     df_aft_miss <- data_after_missing()
+#     DT::datatable(data = df_aft_miss,
+#                   rownames = FALSE,
+#                   options = list(scrollX = T))
+#     
+#     
+#   })
+#   
+#   
+#   
+#   
+#   #CREATING THE DATASETS USED FOR FORECASTING --------------------------------------------
+#   
+#   #function creates a new variable to capture the two-week forecast
+#   addTwoWeekForecast <- function(merged_df) {
+#     
+#     
+#     #create a two week forecast variable
+#     original_df = merged_df %>% 
+#       mutate_at(c('Date'), ~ as.Date(., "%Y-%m-%d")) %>% 
+#       mutate(two_week_forecast_date = Date + 14) %>% 
+#       mutate_if(is.character, as.factor) 
+#     
+#     #map the two week forecast variable to the outcome variable in two weeks
+#     twoWeek_df = original_df %>%
+#       select(Date, State, covid_measure) %>%
+#       rename(two_week_outcome = covid_measure,
+#              two_week_forecast_date = Date)
+#     
+#     
+#     #combine the original dataframe with the new dataframe with the two week forecast
+#     working_df = original_df %>%
+#       left_join(twoWeek_df,
+#                 by = c("State" = "State",
+#                        "two_week_forecast_date" = "two_week_forecast_date"))
+#     
+#     return(working_df)
+#   }
+#   
+#   
+#   
+#   
+#   #make a reactive data frame after the two week forecast has been added
+#   forecast_data <- reactive({
+#     
+#     addTwoWeekForecast(data_after_missing()) 
+#     
+#   })
+#   
+#   
+#   
+#   #Feature Selection Page Output ---------------------------------------------------
+#   
+#   output$ft_sel <- renderUI({
+#     
+#     HTML(paste("Here's The Results of Feature Selection:", "Here's a Variable Importance Plot:", sep = "<br/><br/>"))
+#     
+#   })
+#   
+#   #making edits to the forecasted data for random forest
+#   forecast_data_rf <- reactive({
+#     
+#     df <- addTwoWeekForecast(data_after_missing()) 
+#     
+#     #changes the names of columns to help with the predictions to follow later
+#     colnames(df)[which(names(df) == "covid_measure")] <- "two_week_backcast"
+#     colnames(df)[which(names(df) == "two_week_outcome")] <- "y"
+#     
+#     df
+#     
+#   })
+#   
+#   #RANDOM FOREST FEATURE SELECTION -----------------------------------
+#   #creates a reactive dataframe for doing random forest
+#   randfor_data <- reactive({
+# 
+#     #drops columns for random forest
+#     drops <-c("Year", "Week", "two_week_forecast_date") #droping
+# 
+# 
+#     #drops columns that are in the above vector
+#     df <- forecast_data()[, -which(names(forecast_data()) %in% drops)]
+# 
+# 
+#     colnames(df)[which(names(df) == "covid_measure")] <- "two_week_backcast"
+#     colnames(df)[which(names(df) == "two_week_outcome")] <- "y"
+# 
+# 
+#     ##Moving Ouctome Variable to front of dataset for ease of splitting
+#     col_idx <- grep("^y$", names(df))
+# 
+#     #reorganizes the dataframe so that
+#     df <- df[, c(col_idx, (1:ncol(df))[-col_idx])]
+# 
+# 
+#     #replaces NA values in the two_week_outcome variable with NAs
+#     df <- df %>%  drop_na(y)
+# 
+#   })
+#   
+#   
+#   bestmtry <- function(randfor_data) ({
+#     
+#     #creates the x and y dataframes needed for random forests
+#     end <- ncol(randfor_data)
+#     x <- randfor_data[,2:end]
+#     y <- randfor_data[,1]
+#     
+#     
+#     #tune the random forest model
+#     set.seed(10)
+#     bestmtry <- as.data.frame(tuneRF(x, y, stepFactor=1.5, improve=1e-5, ntree=500))
+#     bestmtry_var<- bestmtry[which(bestmtry$OOBError == min(bestmtry$OOBError)),1]
+#     
+#     
+#     return(bestmtry_var)
+#     
+#   })
+#   
+#   
+#   
+#   
+#   #returns a data frame with the variable importances (according to node purity) after passing in the cleaned data for random forests
+#   randfor_model <- function(randfor_data, bestmtry) ({
+#     
+#     rf <- randomForest(y ~ ., mtry = bestmtry, data = randfor_data)
+#     
+#     #extracts the variable importances
+#     features <- as.data.frame(rf$importance)
+#     features <- as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity")))
+#     
+#     
+#     #extracts the top 10 features with the highest node purity values
+#     top <- top_n(features, 10, features$NodPurity)
+#     
+#     
+#     return(top)
+#     
+#   })
+#   
+#   #gets the top 10 features from the variable importance plot after random forests has been run
+#   
+#   top_10 <- reactive({
+#     
+#     mtry <- 12
+#     randfor_model(randfor_data(), mtry)
+#     
+#   }) 
+#   
+#   
+#   output$varImp <- renderPlot({
+#     
+#     #mtry  <- ncol(randfor_data())/3
+#     #  mtry <- 12
+#     #mtry <- bestmtry(randfor_data())
+#     #var_imp <- randfor_model(randfor_data(), mtry)
+#     var_imp <- top_10()
+#     
+#     var_imp <- var_imp %>%
+#       transform(Feature = reorder(Feature, NodPurity))
+#     
+#     var_imp %>%
+#       ggplot(aes(x = Feature, y = NodPurity)) +
+#       geom_bar(stat = "identity") +
+#       labs(title = "Variable Importance Plot", y = "Node Purity") +
+#       coord_flip() +
+#       theme(axis.text = element_text(size = 16),
+#             axis.title = element_text(size = 20, face = "bold"),
+#             plot.title = element_text(size = 22, face = "bold"))
+#     
+#     
+#   })
+#   
+#   
+#   
+# #   # output$rand_for <- renderDataTable({
+# #   #   
+# #   #  # mtry <- bestmtry(randfor_data())
+# #   #   mtry  <- ncol(randfor_data())/3
+# #   #   var_imp <- randfor_model(randfor_data(), mtry)
+# #   # 
+# #   #   DT::datatable(data = var_imp,
+# #   #                 rownames = FALSE,
+# #   #                 options = list(scrollX = T))
+# #   # })
+# #   
+# #   
+# #   #Pre-Processing the Data for Feature Selection & Create Required Train/Test/Prediction Data Sets ------------------------------------------------
+# #   
+# #   #creates the training dataset for the XGBoost model 
+# #   createTrainSet <- function(forecast_data) {
+# #     
+# #     latest_date = max(forecast_data$Date)
+# #     
+# #     train = forecast_data[forecast_data$two_week_forecast_date <= (latest_date - 14), ] %>% 
+# #       na.omit()
+# #     
+# #     return(train)
+# #   }
+# #   
+# #   #creates a reactive dataframe for the training data 
+# #   train_data <- reactive ({
+# #     
+# #     createTrainSet(forecast_data())
+# #     
+# #     
+# #   })
+# #   
+# #   #creating training data based on random forest
+# #   train_data_rf <- reactive({
+# # 
+# #     createTrainSet(forecast_data_rf())
+# #   })
+# #   
+# #   #creates the test set
+# #   createTestSet <- function(forecast_data) {
+# #     
+# #     latest_date = max(forecast_data$Date)
+# #     
+# #     test = forecast_data[(forecast_data$two_week_forecast_date <= latest_date) &
+# #                            (forecast_data$two_week_forecast_date > (latest_date - 14)), ]
+# #     
+# #     return(test)
+# #     
+# #   }
+# #   
+# #   
+# #   #creates a reactive dataframe for the test data
+# #   test_data <- reactive ({
+# #     
+# #     createTestSet(forecast_data())
+# #     
+# #     
+# #   })
+# #   
+# #   test_data_rf <- reactive({
+# #     
+# #     createTestSet(forecast_data_rf())
+# #   })
+# #   
+# #   
+# #   #creates the predictions dataset
+# #   createPredSet <- function(forecast_data) {
+# #     
+# #     latest_date = max(forecast_data$Date)
+# #     
+# #     
+# #     pred = forecast_data[forecast_data$two_week_forecast_date > latest_date, ]
+# #     
+# #     return(pred)
+# #     
+# #   }
+# #   
+# #   #creates a reactive dataframe for the predictions dataset
+# #   preds_data <- reactive ({
+# #     
+# #     createPredSet(forecast_data())
+# #     
+# #     
+# #   })
+# #   
+# # preds_data_rf <- reactive({
+# #     
+# #     createPredSet(forecast_data_rf())
+# #   })
+# #   
+# #   
+# #   
+# #   #data cleaning for glmnet ------------------------------------
+# #   # top_10_vector <- reactive({
+# #   #   as.vector(top_10()$Feature)
+# #   # }) 
+# #   
+# #   
+# #   #subsets a given dataframe so that it only includes the 10 most important factors, as determined through random forests
+# #   rf.tops <- function(sample_df) {
+# #     
+# #     top_f <- top_10()$Feature
+# #     
+# #     
+# #     new <-sample_df %>%
+# #       select(all_of(c(top_f)))
+# #     
+# #     #add back in the "y" outcome and the state column
+# #     new$y <-sample_df$two_week_outcome
+# #     new$state <- sample_df$State
+# #     new$date <- sample_df$Date
+# #     
+# #     
+# #     return(new)
+# #   }
+# #   
+# #   
+# #   train_data_glm <- reactive({
+# #     
+# #     rf.tops(train_data_rf())
+# #     
+# #   })
+# #   
+# #   
+# #   test_data_glm <- reactive({
+# #     
+# #     rf.tops(test_data_rf())
+# #   })
+# #   
+# #   
+# #   preds_data_glm <- reactive({
+# #     
+# #     rf.tops(preds_data_rf())
+# #   })
+# #   
+# #   
+# #   
+# #   
+# #   
+# #   #--------Beginning the GLMNET stuff
+# #   
+# #   
+# #   geo_combine<- function(df){
+# #     geo <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/us-zip-code-latitude-and-longitude.csv", header= FALSE, stringsAsFactors = FALSE)
+# #     geo<- as.data.frame(geo)
+# #     geo<-geo%>% separate(V1, into=c("Zip", "City", "State", "Latitude","Longitude","Timezone","Daylight_savings", "geopoint"), sep=";" )
+# #     geo<- geo[-1,]
+# #     geo$Latitude<-as.numeric(geo$Latitude)
+# #     geo$Longitude<-as.numeric(geo$Longitude)
+# #     names(geo) <-tolower(names(geo))
+# #     
+# #     state_latLong <- geo%>%
+# #       group_by(state)%>%
+# #       summarise(latitude = mean(latitude, na.rm = TRUE),
+# #                 longitude = mean(longitude, na.rm = TRUE))
+# #     
+# #     return(left_join(df, state_latLong, by='state'))
+# #   }
+# #   
+# #   
+# #   #add state longitude and latitude data to the training, testing, and predictions datasets
+# #   datatrain_lm<- reactive({
+# #     
+# #     geo_combine(train_data_glm())
+# #     
+# #   })
+# #   
+# #   datatest_lm<- reactive({
+# #     geo_combine(test_data_glm())
+# #     
+# #   })
+# #   datapreds_lm <- reactive({
+# #     
+# #     geo_combine(preds_data_glm())
+# #     
+# #   })
+# #   
+# #   
+# #   
+# #   cleaning_lm<- function(df){
+# #     #df1 <- df[, -which(names(df) %in% c("state"))]#%>% 
+# #     
+# #     df1 <- df %>% select(-c("state"))
+# #     
+# #     
+# #     #select(-1) #removing 'id'
+# #     col_idx <- grep("^y$", names(df1))
+# #     df1 <- df1[, c(col_idx, (1:ncol(df1))[-col_idx])]
+# #     
+# #     #dropping date, cannot create a poly w/ cbind() after polys created
+# #     date_hold<- as.data.frame(df1$date)
+# #     colnames(date_hold)<-"date"
+# #     
+# #     # drops<-c( "date") #droping 
+# #     # df1<-df1[, -which(names(df1) %in% drops)]
+# #     # 
+# #     df1 <- df1 %>% select(-c("date"))
+# #     
+# #     
+# #     
+# #     feats<- function(xf, column_numbers) {
+# #       xf %>% 
+# #         mutate_at(vars(column_numbers), funs(sqr = (.)^2))%>%
+# #         mutate_at(vars(column_numbers), funs(cube =(.)^3))
+# #     }
+# #     end<-ncol(df1)
+# #     
+# #     #, two_week_forecast_date
+# #     return(cbind(feats(df1, 2:end), date_hold)) #do not include y or "id" in poly calcs
+# #   }
+# #   
+# #   
+# #   
+# #   datatrain_poly<- reactive({
+# #     
+# #     cleaning_lm(datatrain_lm())
+# #     
+# #   }) 
+# #   datatest_poly <- reactive({
+# #     
+# #     cleaning_lm(datatest_lm())
+# #     
+# #     
+# #   })
+# #   
+# #   datapreds_poly<- reactive({
+# #     
+# #     cleaning_lm(datapreds_lm())
+# #     
+# #   })
+# #   
+# #   
+# #   #Creating the Model Matrices for the Glmnet model ---------------------------
+# #   
+# # 
+# # 
+# #   
+# #   datatrain_glmnet <- reactive ({
+# # 
+# #     datatrain_poly() %>%
+# # 
+# #      mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
+# #       model.matrix(object= ~ .-1, . , contrasts.arg =
+# #                      lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
+# #                             contrasts, contrasts = FALSE))
+# # 
+# # 
+# #   })
+# #   
+# #   datatest_glmnet <- reactive ({
+# #     
+# # 
+# #     datatest_poly() %>% 
+# #       
+# #       mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
+# #       model.matrix(object= ~ .-1, . , contrasts.arg =
+# #                      lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
+# #                             contrasts, contrasts = FALSE))
+# #     
+# #     
+# #     
+# #   })
+# #   
+# #   
+# #   datapreds_glmnet <- reactive ({
+# #     
+# #     datapreds_poly() %>% 
+# #     
+# #     mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
+# #     model.matrix(object= ~ .-1, . , contrasts.arg =
+# #                    lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
+# #                           contrasts, contrasts = FALSE))
+# #     
+# #   })
+# #   
+# #   
+# #   #Training GLMNnet & doing predictions -------------------
+# #   
+# #  
+# #   
+# # test_set_predictions <- reactive({
+# #     
+# #     train_glm <- glmnet(
+# #           x = datatrain_glmnet()[,-1],
+# #           y = datatrain_glmnet()[,1], relax = FALSE, nfolds= 3)
+# # 
+# #      
+# #      lamMin<- min(train_glm[["lambda"]])
+# #      
+# #        results <- predict(train_glm,
+# #                         newx = datatest_glmnet()[,-1],
+# #                         newy = datatest_glmnet()[,1],
+# #                         s = lamMin ,
+# #                         interval="confidence")
+# # 
+# # 
+# #  
+# #   })
+# #   
+# #   
+# #   pred_set_predictions <- reactive({
+# #       
+# #       train_glm <- glmnet(
+# #         x = datatrain_glmnet()[,-1],
+# #         y = datatrain_glmnet()[,1], relax = FALSE, nfolds= 3)
+# #       
+# #       
+# #       lamMin<- min(train_glm[["lambda"]])
+# #       
+# #       results <- predict(train_glm,
+# #                          newx= datapreds_glmnet()[,-1],
+# #                          newy= datapreds_glmnet()[,1],
+# #                          s = lamMin ,
+# #                          interval="confidence")
+# #       
+# #       
+# #       
+# #     })
+# #     
+# #     
+# #     
+# #   test_glm <- reactive({
+# #     
+# #     as.data.frame(test_set_predictions())
+# #   })
+# #   
+# #   
+# #   glm_test <- reactive({
+# #     
+# #     as.data.frame(datatest_glmnet())
+# #   })
+#   
+# 
+# # preds_act <- reactive({
+# #   
+# #   preds_act <- cbind(test_glm(), glm_test()$y)
+# #   
+# #   #RMSE_glm <- sqrt(mean(preds_act[,2]-preds_act[,1])^2)
+# #   
+# #   preds_act$Observed<- preds_act[,1]
+# #   
+# #   preds_act$Predicted<- preds_act[,2]
+# #   
+# #   preds_act$two_week_forecast_date <- preds_data()$two_week_forecast_date
+# #   
+# #   })
+#   
+#   
+#   # final_preds <- reactive ({
+#   #   
+#   # 
+#   #   final_preds <- cbind(preds_set_predictions(), datapreds_lm())
+#   #   final_preds$Predicted <- final_preds[,1]
+#   # })
+#   
+# #check that this is allowed!!!!
+# 
+# 
+#   
+#   
+#   # output$set1 <- renderDataTable({
+#   #   
+#   # 
+#   #   DT::datatable(data = forecast_data_rf(),
+#   #                 rownames = FALSE, options = list(scrollX = T))
+#   #   
+#   # })
+#   # 
+#   # 
+#   # output$set2 <- renderDataTable({
+#   #   
+#   # 
+#   #   DT::datatable(data =  test_data_glm(),
+#   #                 rownames = FALSE, options = list(scrollX = T))
+#   #   
+#   # })
+#   # 
+#   # 
+#   # output$set3 <- renderDataTable({
+#   #   
+#   #   
+#   #   DT::datatable(data =  preds_data_glm(),
+#   #                 rownames = FALSE, options = list(scrollX = T))
+#   #   
+#   # })
+#   # 
+#   # output$set4 <- renderDataTable({
+#   #   
+#   #   
+#   #   DT::datatable(data =   test_set_predictions(),
+#   #                 rownames = FALSE, options = list(scrollX = T))
+#   #   
+#   # })
+#   
+#   
+#   
+#   
+# #   
+# #   
+# # output$glmtest <- renderDataTable({
+# #     
+# #     # train_glm <- as.data.frame(train_glm())
+# #     
+# #     DT::datatable(data = test_glm(),
+# #                   rownames = FALSE, options = list(scrollX = T))
+# #     
+# #   })
+#   
+# 
+# #Plotting
+# 
+# 
+# 
+# 
+# 
+# # output$final_preds <- renderPlot({
+# # 
+# # 
+# #   final_preds = final_preds %>%
+# #     mutate(state = tolower(setNames(state.name, state.abb)[state]))
+# #   #create map data
+# #   #create map data
+# #   map = map_data("state") %>%
+# #     full_join(final_preds, by = c("region" = "state"))
+# #   #plot
+# #   map_plot = ggplot(map, aes(long, lat, group = group)) +
+# #     geom_polygon(aes(fill = Predicted), color = "white")+
+# #     scale_fill_viridis_c(option = "B", direction=-1)+
+# #     ggtitle("Predicted COVID Measure (per 100,000) Next Week")
+# #   map_plot
+# # 
+# # 
+# # })
+# 
+# # 
+# # output$
+# 
+# 
+# 
+#   
+# 
+#   
+#   # #Predicting with glmnet -------------------
+#   # predictGLM_Model <- function(train_glm, new_data) {
+#   #   
+#   #   lamMin<- min(train_glm[["lambda"]])
+#   #   
+#   #   results<-predict(train_glm, 
+#   #                    newx= new_data[,-1], 
+#   #                    newy= new_data[,1], 
+#   #                    s = lamMin , 
+#   #                    interval="confidence")
+#   #   
+#   #   
+#   #   return(results)
+#   # }
+#   # 
+#   # test_set_predictions <- reactive({
+#   #   
+#   #   test <- predictGLM_Model(train_glm(), datatest_glmnet())
+#   #   as.data.frame(test)
+#   # })
+#   # 
+#   # 
+#   # preds_set_predictions <- reactive({
+#   #   
+#   #   predictGLM_Model(train_glm(), datapreds_glmnet())
+#   # })
+#   # 
+#   
+#   
+#   
+#  
+#   
+#   
+#   
+#   
+#   
+#   
+#   #Model Building Page ---------------------------------------------------------------------
+#   
+#   # output$xgb_pls_wait <- renderUI({
+#   #   
+#   #   HTML(paste("Please wait while the XGBoost Model Runs...", sep = "<br/><br/>"))
+#   #   
+#   # })
+#   # 
+#   # output$display_model <- renderUI({
+#   #   
+#   #   HTML(paste("Here's the Model Specification for the Best Tuned XGBoost Model:", sep = "<br/><br/>"))
+#   #   
+#   # })
+#   # 
+#   # 
+#   # 
+#   # 
+#   # 
+#   # 
+#   # trainXGBoost <- function(train_df) {
+#   #   
+#   #   #Convert the predictor variable matrices to xgb.DMatrix data types
+#   #   XGBTrain = xgb.DMatrix(data.matrix(train_df %>%
+#   #                                        select(-c(two_week_forecast_date,
+#   #                                                  two_week_outcome))))
+#   #   #Define random grid parameters for tuning the models
+#   #   XGBtc=trainControl(
+#   #     method='cv',
+#   #     number=5,
+#   #     allowParallel=TRUE,
+#   #     verboseIter=FALSE,
+#   #     returnData=FALSE
+#   #   )
+#   #   # create grid for tuning hyperparameters
+#   #   XGBtg <- expand.grid(nrounds = 20, #temporary value to facilitate faster run time during app construnction c(50, 100, 250),
+#   #                        max_depth = 5, #c(5, 10, 15),
+#   #                        colsample_bytree = 0.5, #seq(0.5, 0.9, length.out = 5),
+#   #                        eta = 0.1, #c(0.1, 0.2, 0.4),
+#   #                        gamma=c(0, 2, 3),
+#   #                        min_child_weight = 1,
+#   #                        subsample = 0.75
+#   #   )
+#   #   
+#   #   
+#   #   # train model - with dates and state
+#   #   XGBModel = train(
+#   #     XGBTrain, train_df$two_week_outcome,
+#   #     trControl = XGBtc,
+#   #     tuneGrid = XGBtg,
+#   #     method = "xgbTree")
+#   #   
+#   #   
+#   #   
+#   #   return(XGBModel)
+#   #   
+#   # }
+#   # 
+#   # 
+#   # 
+#   # #displays the title for the forecasting table that is to be displayed
+#   # output$forecast_table <- renderUI({
+#   #   
+#   #   HTML(paste("Here's The Dataset Including the Two Week Forecasts:", sep = "<br/><br/>"))
+#   #   
+#   # })
+#   # 
+#   # 
+#   # #displays the forecasted data
+#   # output$forecast <- renderDataTable({
+#   #   
+#   #   DT::datatable(data = forecast_data_rf(),
+#   #                 rownames = FALSE,
+#   #                 options = list(scrollX = T))
+#   # })
+#   # 
+#   # #creates the XGB model to be used by the later functions
+#   # 
+#   # 
+#   # #captures the results of running the XGB model
+#   # xgb_model_output <- eventReactive(input$runxgb, {
+#   #   
+#   #   trainXGBoost(train_data())
+#   #   
+#   # }
+#   # )
+#   # 
+#   # 
+#   # #outputs the model specifications for the XGboost model
+#   # output$model_specs <- renderDataTable({
+#   #   
+#   #   best_model <- xgb_model_output()$bestTune
+#   #   
+#   #   DT::datatable(data = best_model,
+#   #                 rownames = FALSE,
+#   #                 options = list(scrollX = T))
+#   #   
+#   #   
+#   # })
+#   # 
+#   # 
+#   # # #predictions using the different datasets 
+#   # #  
+#   # #Get predctions based on XGB mmodel
+#   # XGBpredictions <- function(model, data){
+#   #   #Convert data frame into dense matrix for XGB model
+#   #   matrixData = xgb.DMatrix(data.matrix(data %>%
+#   #                                          select(-c(two_week_forecast_date,
+#   #                                                    two_week_outcome))))
+#   #   #Get predicitons on test set
+#   #   XGBpredicitons=predict(model, matrixData)
+#   #   return(XGBpredicitons)
+#   # }
+#   # 
+#   # 
+#   # #creates a dataframe for the results of XGBoost model predictions
+#   # test_data_preds <- reactive({
+#   #   XGBpredictions(xgb_model_output(), test_data())
+#   #   
+#   # })
+#   # 
+#   # 
+#   # combinedObvsPredsDf <- function(test, predicted){
+#   #   
+#   #   #Create dataframe
+#   #   obs_vs_pred = test %>%
+#   #     select(two_week_outcome) %>%
+#   #     rename(Observed = two_week_outcome) %>%
+#   #     bind_cols(tibble(Predicted = predicted)) %>%
+#   #     mutate(Observed = log(Observed),
+#   #            Predicted = log(Predicted))
+#   #   
+#   #   return(obs_vs_pred)
+#   #   
+#   # }
+#   # 
+#   # 
+#   # output$testing <- renderDataTable({
+#   #   
+#   #   new_df <- combinedObvsPredsDf(test_data(), test_data_preds())
+#   #   
+#   #   
+#   #   DT::datatable(data = new_df,
+#   #                 rownames = FALSE, options = list(scrollX = T))
+#   #   
+#   # })
+#   # 
+#   # output$preds_vs_observed <- renderPlot({
+#   #   
+#   #   new_df <- combinedObvsPredsDf(test_data(), test_data_preds())
+#   #   
+#   #   
+#   #   #creates the required dataframe
+#   #   new_df %>%
+#   #     ggplot(aes(x = Observed, y = Predicted)) +
+#   #     geom_point() +
+#   #     geom_abline() +
+#   #     xlab("Log(Observed)") +
+#   #     ylab("Log(Predicted)") +
+#   #     theme(axis.text = element_text(size = 16),
+#   #           axis.title = element_text(size = 20, face = "bold"),
+#   #           plot.title = element_text(size = 22, face = "bold"))
+#   #   
+#   #   
+#   #   
+#   #   
+#   # })
+#   # 
+#   # #creates a new reactive dataframe
+#   # 
+#   # outcome_all <- reactive({
+#   #   
+#   #   XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
   #   
-  #  # mtry <- bestmtry(randfor_data())
-  #   mtry  <- ncol(randfor_data())/3
-  #   var_imp <- randfor_model(randfor_data(), mtry)
+  #   train_data() %>% 
+  #     select(two_week_forecast_date, two_week_outcome) %>%
+  #     rename(Date = two_week_forecast_date,
+  #            Outcome = two_week_outcome) %>% 
+  #     mutate (Pred_vs_Obs = "Observed") %>% 
+  #     rbind(tibble(Date = preds_data()$two_week_forecast_date,
+  #                  Outcome = XGBPredsPred,
+  #                  Pred_vs_Obs = "Predicted"))
+  #   
+  #   
+  # })
   # 
-  #   DT::datatable(data = var_imp,
-  #                 rownames = FALSE,
-  #                 options = list(scrollX = T))
-  # })
-  
-  
-  #Pre-Processing the Data for Feature Selection & Create Required Train/Test/Prediction Data Sets ------------------------------------------------
-  
-  #creates the training dataset for the XGBoost model 
-  createTrainSet <- function(forecast_data) {
-    
-    latest_date = max(forecast_data$Date)
-    
-    train = forecast_data[forecast_data$two_week_forecast_date <= (latest_date - 14), ] %>% 
-      na.omit()
-    
-    return(train)
-  }
-  
-  #creates a reactive dataframe for the training data 
-  train_data <- reactive ({
-    
-    createTrainSet(forecast_data())
-    
-    
-  })
-  
-  # #creating training data based on random forest
-  # train_data_rf <- reactive({
+  # 
+  # 
+  # 
+  # 
+  # 
+  # #plots the resulting predictions
+  # output$all_predictions <- renderPlot({
   #   
-  #   createTrainSet(randfor_data())
+  #   outcome_all() %>% 
+  #     
+  #     ggplot(aes(x = Date, y = Outcome)) +
+  #     
+  #     geom_point(aes(color = Pred_vs_Obs))  +
+  #     theme(axis.text = element_text(size = 16),
+  #           axis.title = element_text(size = 20, face = "bold"),
+  #           plot.title = element_text(size = 22, face = "bold"))
+  #   
+  #   
+  #   
   # })
-  
-  #creates the test set
-  createTestSet <- function(forecast_data) {
-    
-    latest_date = max(forecast_data$Date)
-    
-    test = forecast_data[(forecast_data$two_week_forecast_date <= latest_date) &
-                           (forecast_data$two_week_forecast_date > (latest_date - 14)), ]
-    
-    return(test)
-    
-  }
-  
-  
-  #creates a reactive dataframe for the test data
-  test_data <- reactive ({
-    
-    createTestSet(forecast_data())
-    
-    
-  })
-  
-  #creates the predictions dataset
-  createPredSet <- function(forecast_data) {
-    
-    latest_date = max(forecast_data$Date)
-    
-    
-    pred = forecast_data[forecast_data$two_week_forecast_date > latest_date, ]
-    
-    return(pred)
-    
-  }
-  
-  #creates a reactive dataframe for the predictions dataset
-  preds_data <- reactive ({
-    
-    createPredSet(forecast_data())
-    
-    
-  })
-  
-  
-  
-  #data cleaning for glmnet ------------------------------------
-  # top_10_vector <- reactive({
-  #   as.vector(top_10()$Feature)
-  # }) 
-  
-  
-  #subsets a given dataframe so that it only includes the 10 most important factors, as determined through random forests
-  rf.tops <- function(sample_df) {
-    
-    top_f <- top_10()$Feature
-    
-    
-    new <-sample_df %>%
-      select(all_of(c(top_f)))
-    
-    #add back in the "y" outcome and the state column
-    new$y<-sample_df$two_week_outcome
-    new$state <- sample_df$State
-    new$date <- sample_df$Date
-    return(new)
-  }
-  
-  
-  train_data_glm <- reactive({
-    
-    rf.tops(train_data())
-    
-  })
-  
-  
-  test_data_glm <- reactive({
-    
-    rf.tops(test_data())
-  })
-  
-  
-  preds_data_glm <- reactive({
-    
-    rf.tops(preds_data())
-  })
-  
-  
-  
-  
-  
-  #--------Beginning the GLMNET stuff
-  
-  
-  geo_combine<- function(df){
-    geo <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/us-zip-code-latitude-and-longitude.csv", header= FALSE, stringsAsFactors = FALSE)
-    geo<- as.data.frame(geo)
-    geo<-geo%>% separate(V1, into=c("Zip", "City", "State", "Latitude","Longitude","Timezone","Daylight_savings", "geopoint"), sep=";" )
-    geo<- geo[-1,]
-    geo$Latitude<-as.numeric(geo$Latitude)
-    geo$Longitude<-as.numeric(geo$Longitude)
-    names(geo) <-tolower(names(geo))
-    
-    state_latLong <- geo%>%
-      group_by(state)%>%
-      summarise(latitude = mean(latitude, na.rm = TRUE),
-                longitude = mean(longitude, na.rm = TRUE))
-    
-    return(left_join(df, state_latLong, by='state'))
-  }
-  
-  
-  #add state longitude and latitude data to the training, testing, and predictions datasets
-  datatrain_lm<- reactive({
-    
-    geo_combine(train_data_glm())
-    
-  })
-  datatest_lm<- reactive({
-    geo_combine(test_data_glm())
-    
-  })
-  datapreds_lm <- reactive({
-    
-    geo_combine(preds_data_glm())
-    
-  })
-  
-  
-  
-  cleaning_lm<- function(df){
-    #df1 <- df[, -which(names(df) %in% c("state"))]#%>% 
-    
-    df1 <- df %>% select(-c("state"))
-    
-    
-    #select(-1) #removing 'id'
-    col_idx <- grep("^y$", names(df1))
-    df1 <- df1[, c(col_idx, (1:ncol(df1))[-col_idx])]
-    
-    #dropping date, cannot create a poly w/ cbind() after polys created
-    date_hold<- as.data.frame(df1$date)
-    colnames(date_hold)<-"date"
-    
-    drops<-c( "date") #droping 
-    df1<-df1[, -which(names(df1) %in% drops)]
-    
-    feats<- function(xf, column_numbers) {
-      xf %>% 
-        mutate_at(vars(column_numbers), funs(sqr = (.)^2))%>%
-        mutate_at(vars(column_numbers), funs(cube =(.)^3))
-    }
-    end<-ncol(df1)
-    
-    #, two_week_forecast_date
-    return(cbind(feats(df1, 2:end), date_hold)) #do not include y or "id" in poly calcs
-  }
-  
-  
-  
-  datatrain_poly<- reactive({
-    
-    cleaning_lm(datatrain_lm())
-    
-  }) 
-  datatest_poly <- reactive({
-    
-    cleaning_lm(datatest_lm())
-    
-    
-  })
-  
-  datapreds_poly<- reactive({
-    
-    cleaning_lm(datapreds_lm())
-    
-  })
-  
-  
-  #Creating the Model Matrices for the Glmnet model ---------------------------
-  
-  createGLM_modelmat <- function(poly_df) {
-    
-    glmnet_mat <- poly_df %>%
-      mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
-      model.matrix(object= ~ .-1, . , contrasts.arg =
-                     lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
-                            contrasts, contrasts = FALSE))
-    
-    return(glmnet_mat)
-    
-  }
-  
-  
-  
-  #model matrices for each of the different datasets (training, testing, and predictions)
-  datatrain_glmnet <- reactive ({
-    
-    createGLM_modelmat(datatrain_poly())
-  })
-  
-  
-  datatest_glmnet <- reactive ({
-    
-    createGLM_modelmat(datatest_poly())
-  })
-  
-  
-  datapreds_glmnet <- reactive ({
-    
-    createGLM_modelmat(datapreds_poly())
-  })
-  
-  
-  #Training GLMNnet -------------------
-  
-  trainGLM_Model <- function(datatrain_glmnet) {
-    
-    train_glm <- glmnet(
-      x = datatrain_glmnet[,-1],
-      y = datatrain_glmnet[,1], relax = FALSE, nfolds= 3)
-    
-    return(train_glm)
-    
-  }
-  
-  
-  train_glm <- reactive({
-    
-    trainGLM_Model(datatrain_glmnet())
-  })
-  
-  
-  #Predicting with glmnet -------------------
-  predictGLM_Model <- function(train_glm, new_data) {
-    
-    lamMin<- min(train_glm[["lambda"]])
-    
-    results<-predict(train_glm, 
-                     newx= new_data[,-1], 
-                     newy= new_data[,1], 
-                     s = lamMin , 
-                     interval="confidence")
-    
-    
-    return(results)
-  }
-  
-  test_set_predictions <- reactive({
-    
-    test <- predictGLM_Model(train_glm(), datatest_glmnet())
-    as.data.frame(test)
-  })
-  
-  
-  preds_set_predictions <- reactive({
-    
-    predictGLM_Model(train_glm(), datapreds_glmnet())
-  })
-  
-  
-  
-  
-  output$glmtest <- renderDataTable({
-    
-    
-    DT::datatable(data = datatrain_glmnet(),
-                  rownames = FALSE, options = list(scrollX = T))
-    
-  })
-  
-  
-  
-  
-  
-  
-  
-  #Model Building Page ---------------------------------------------------------------------
-  
-  output$xgb_pls_wait <- renderUI({
-    
-    HTML(paste("Please wait while the XGBoost Model Runs...", sep = "<br/><br/>"))
-    
-  })
-  
-  output$display_model <- renderUI({
-    
-    HTML(paste("Here's the Model Specification for the Best Tuned XGBoost Model:", sep = "<br/><br/>"))
-    
-  })
-  
-  
-  
-  
-  
-  
-  trainXGBoost <- function(train_df) {
-    
-    #Convert the predictor variable matrices to xgb.DMatrix data types
-    XGBTrain = xgb.DMatrix(data.matrix(train_df %>%
-                                         select(-c(two_week_forecast_date,
-                                                   two_week_outcome))))
-    #Define random grid parameters for tuning the models
-    XGBtc=trainControl(
-      method='cv',
-      number=5,
-      allowParallel=TRUE,
-      verboseIter=FALSE,
-      returnData=FALSE
-    )
-    # create grid for tuning hyperparameters
-    XGBtg <- expand.grid(nrounds = 20, #temporary value to facilitate faster run time during app construnction c(50, 100, 250),
-                         max_depth = 5, #c(5, 10, 15),
-                         colsample_bytree = 0.5, #seq(0.5, 0.9, length.out = 5),
-                         eta = 0.1, #c(0.1, 0.2, 0.4),
-                         gamma=c(0, 2, 3),
-                         min_child_weight = 1,
-                         subsample = 0.75
-    )
-    
-    
-    # train model - with dates and state
-    XGBModel = train(
-      XGBTrain, train_df$two_week_outcome,
-      trControl = XGBtc,
-      tuneGrid = XGBtg,
-      method = "xgbTree")
-    
-    
-    
-    return(XGBModel)
-    
-  }
-  
-  
-  
-  #displays the title for the forecasting table that is to be displayed
-  output$forecast_table <- renderUI({
-    
-    HTML(paste("Here's The Dataset Including the Two Week Forecasts:", sep = "<br/><br/>"))
-    
-  })
-  
-  
-  #displays the forecasted data
-  output$forecast <- renderDataTable({
-    
-    DT::datatable(data = forecast_data(),
-                  rownames = FALSE,
-                  options = list(scrollX = T))
-  })
-  
-  #creates the XGB model to be used by the later functions
-  
-  
-  #captures the results of running the XGB model
-  xgb_model_output <- eventReactive(input$runxgb, {
-    
-    trainXGBoost(train_data())
-    
-  }
-  )
-  
-  
-  #outputs the model specifications for the XGboost model
-  output$model_specs <- renderDataTable({
-    
-    best_model <- xgb_model_output()$bestTune
-    
-    DT::datatable(data = best_model,
-                  rownames = FALSE,
-                  options = list(scrollX = T))
-    
-    
-  })
-  
-  
-  # #predictions using the different datasets 
-  #  
-  #Get predctions based on XGB mmodel
-  XGBpredictions <- function(model, data){
-    #Convert data frame into dense matrix for XGB model
-    matrixData = xgb.DMatrix(data.matrix(data %>%
-                                           select(-c(two_week_forecast_date,
-                                                     two_week_outcome))))
-    #Get predicitons on test set
-    XGBpredicitons=predict(model, matrixData)
-    return(XGBpredicitons)
-  }
-  
-  
-  #creates a dataframe for the results of XGBoost model predictions
-  test_data_preds <- reactive({
-    XGBpredictions(xgb_model_output(), test_data())
-    
-  })
-  
-  
-  combinedObvsPredsDf <- function(test, predicted){
-    
-    #Create dataframe
-    obs_vs_pred = test %>%
-      select(two_week_outcome) %>%
-      rename(Observed = two_week_outcome) %>%
-      bind_cols(tibble(Predicted = predicted)) %>%
-      mutate(Observed = log(Observed),
-             Predicted = log(Predicted))
-    
-    return(obs_vs_pred)
-    
-  }
-  
-  
-  output$testing <- renderDataTable({
-    
-    new_df <- combinedObvsPredsDf(test_data(), test_data_preds())
-    
-    
-    DT::datatable(data = new_df,
-                  rownames = FALSE, options = list(scrollX = T))
-    
-  })
-  
-  output$preds_vs_observed <- renderPlot({
-    
-    new_df <- combinedObvsPredsDf(test_data(), test_data_preds())
-    
-    
-    #creates the required dataframe
-    new_df %>%
-      ggplot(aes(x = Observed, y = Predicted)) +
-      geom_point() +
-      geom_abline() +
-      xlab("Log(Observed)") +
-      ylab("Log(Predicted)") +
-      theme(axis.text = element_text(size = 16),
-            axis.title = element_text(size = 20, face = "bold"),
-            plot.title = element_text(size = 22, face = "bold"))
-    
-    
-    
-    
-  })
-  
-  #creates a new reactive dataframe
-  
-  outcome_all <- reactive({
-    
-    XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
-    
-    train_data() %>% 
-      select(two_week_forecast_date, two_week_outcome) %>%
-      rename(Date = two_week_forecast_date,
-             Outcome = two_week_outcome) %>% 
-      mutate (Pred_vs_Obs = "Observed") %>% 
-      rbind(tibble(Date = preds_data()$two_week_forecast_date,
-                   Outcome = XGBPredsPred,
-                   Pred_vs_Obs = "Predicted"))
-    
-    
-  })
-  
-  
-  
-  
-  
-  
-  #plots the resulting predictions
-  output$all_predictions <- renderPlot({
-    
-    outcome_all() %>% 
-      
-      ggplot(aes(x = Date, y = Outcome)) +
-      
-      geom_point(aes(color = Pred_vs_Obs))  +
-      theme(axis.text = element_text(size = 16),
-            axis.title = element_text(size = 20, face = "bold"),
-            plot.title = element_text(size = 22, face = "bold"))
-    
-    
-    
-  })
-  
-  
-  
-  createPredState <- function(forecast_data, state) {
-    
-    latest_date = max(forecast_data$Date)
-    pred_state = forecast_data[forecast_data$two_week_forecast_date > latest_date, ] %>%
-      filter(State == state)
-    
-  }
-  
-  
-  #create a new reactive dataframe for the desired predictions for a given state
-  pred_state <- reactive({
-    
-    createPredState(forecast_data(), input$state)
-    
-  })
-  
-  
-  outcome_state <- reactive({
-    
-    XGBModel_state <- XGBpredictions(xgb_model_output(), pred_state())
-    
-    train_data() %>% 
-      filter(State == input$state) %>% 
-      select(two_week_forecast_date, two_week_outcome) %>%
-      rename(Date = two_week_forecast_date,
-             Outcome = two_week_outcome) %>% 
-      mutate (Pred_vs_Obs = "Observed") %>% 
-      rbind(tibble(Date = pred_state()$two_week_forecast_date,
-                   Outcome = XGBModel_state,
-                   Pred_vs_Obs = "Predicted"))
-    
-  })
-  
-  
-  output$one_state_preds <- renderPlot({
-    
-    outcome_state() %>% 
-      
-      ggplot(aes(x = Date, y = Outcome)) +
-      
-      geom_point(aes(color = Pred_vs_Obs)) +
-      
-      stat_smooth(method = 'lm', formula = y ~ poly(x,10), se = TRUE, color = "darkgrey") +
-      theme(axis.text = element_text(size = 16),
-            axis.title = element_text(size = 20, face = "bold"),
-            plot.title = element_text(size = 22, face = "bold"))
-    
-    
-    
-    
-    
-  })
-  
-  
-  #Results Page -----------------------------------------------------------
-  
-  
-  #prints out the results of running the XGBoost Model in tabular form
-  output$predictions_tabular <- renderDataTable({
-    
-    #Create week labels column
-    Week = rep("Week_1", 51) %>% c(rep("Week_2", 51))
-    
-    XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
-    
-    
-    
-    #Summarise predictions by prediction week
-    preds_all = data.frame(Prediction  = XGBPredsPred, Week = Week) %>%
-      group_by(Week) %>% 
-      summarise(Total = sum(Prediction),
-                Average = mean(Prediction))
-    
-    DT::datatable(data = preds_all,
-                  rownames = FALSE, options = list(scrollX = T))
-    
-    
-  })
-  
-  #another reactive object for the second state input option
-  pred_state_2 <- reactive({
-    
-    createPredState(forecast_data(), input$state_2)
-    
-  })
-  
-  
-  #prints out the predictions by state
-  output$predictions_state_tabular <- renderDataTable({
-    
-    #Create week labels column
-    Week = c("Week_1", "Week_2")
-    
-    #Summarise predictions by prediction week
-    XGBPredsState <- XGBpredictions(xgb_model_output(), pred_state_2())
-    
-    preds_state = data.frame(Week = Week, Prediction  = XGBPredsState) 
-    
-    DT::datatable(data = preds_state,
-                  rownames = FALSE, options = list(scrollX = T))
-    
-  })
+  # 
+  # 
+  # 
+  # createPredState <- function(forecast_data, state) {
+  #   
+  #   latest_date = max(forecast_data$Date)
+  #   pred_state = forecast_data[forecast_data$two_week_forecast_date > latest_date, ] %>%
+  #     filter(State == state)
+  #   
+  # }
+  # 
+  # 
+  # #create a new reactive dataframe for the desired predictions for a given state
+  # pred_state <- reactive({
+  #   
+  #   createPredState(forecast_data(), input$state)
+  #   
+  # })
+  # 
+  # 
+  # outcome_state <- reactive({
+  #   
+  #   XGBModel_state <- XGBpredictions(xgb_model_output(), pred_state())
+  #   
+  #   train_data() %>% 
+  #     filter(State == input$state) %>% 
+  #     select(two_week_forecast_date, two_week_outcome) %>%
+  #     rename(Date = two_week_forecast_date,
+  #            Outcome = two_week_outcome) %>% 
+  #     mutate (Pred_vs_Obs = "Observed") %>% 
+  #     rbind(tibble(Date = pred_state()$two_week_forecast_date,
+  #                  Outcome = XGBModel_state,
+  #                  Pred_vs_Obs = "Predicted"))
+  #   
+  # })
+  # 
+  # 
+  # output$one_state_preds <- renderPlot({
+  #   
+  #   outcome_state() %>% 
+  #     
+  #     ggplot(aes(x = Date, y = Outcome)) +
+  #     
+  #     geom_point(aes(color = Pred_vs_Obs)) +
+  #     
+  #     stat_smooth(method = 'lm', formula = y ~ poly(x,10), se = TRUE, color = "darkgrey") +
+  #     theme(axis.text = element_text(size = 16),
+  #           axis.title = element_text(size = 20, face = "bold"),
+  #           plot.title = element_text(size = 22, face = "bold"))
+  #   
+  #   
+  #   
+  #   
+  #   
+  # })
+  # 
+  # 
+  # #Results Page -----------------------------------------------------------
+  # 
+  # 
+  # #prints out the results of running the XGBoost Model in tabular form
+  # output$predictions_tabular <- renderDataTable({
+  #   
+  #   #Create week labels column
+  #   Week = rep("Week_1", 51) %>% c(rep("Week_2", 51))
+  #   
+  #   XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
+  #   
+  #   
+  #   
+  #   #Summarise predictions by prediction week
+  #   preds_all = data.frame(Prediction  = XGBPredsPred, Week = Week) %>%
+  #     group_by(Week) %>% 
+  #     summarise(Total = sum(Prediction),
+  #               Average = mean(Prediction))
+  #   
+  #   DT::datatable(data = preds_all,
+  #                 rownames = FALSE, options = list(scrollX = T))
+  #   
+  #   
+  # })
+  # 
+  # #another reactive object for the second state input option
+  # pred_state_2 <- reactive({
+  #   
+  #   createPredState(forecast_data(), input$state_2)
+  #   
+  # })
+  # 
+  # 
+  # #prints out the predictions by state
+  # output$predictions_state_tabular <- renderDataTable({
+  #   
+  #   #Create week labels column
+  #   Week = c("Week_1", "Week_2")
+  #   
+  #   #Summarise predictions by prediction week
+  #   XGBPredsState <- XGBpredictions(xgb_model_output(), pred_state_2())
+  #   
+  #   preds_state = data.frame(Week = Week, Prediction  = XGBPredsState) 
+  #   
+  #   DT::datatable(data = preds_state,
+  #                 rownames = FALSE, options = list(scrollX = T))
+  #   
+  # })
   
   
   #Add charts and tables for the prediction comparison
