@@ -36,7 +36,7 @@ user_input_example <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/
 final_preds <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/final_preds.csv")
 preds_act <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/preds_act.csv")
 outcome_all_glm <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/outcome_all.csv")
-
+resids <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/resids.csv")
 
 merged_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
 
@@ -341,7 +341,7 @@ body <- dashboardBody(
     tabItem("model_1",
             
             #TEMPORARY TABLE TO HELP WITH DEBUGGING            
-            dataTableOutput(outputId = "testing"),
+           # dataTableOutput(outputId = "testing"),
             
             
             #click to run the XGBoost model
@@ -384,9 +384,7 @@ body <- dashboardBody(
             
             br(),
             
-            
-          #  dataTableOutput(outputId = "xgb_table"),
-            
+          
             plotOutput(outputId = "state_RMSE_XGB"),
           
             br(),
@@ -397,7 +395,7 @@ body <- dashboardBody(
             
     ),
     
-    
+    #GLM Page --------------------------------------------------
     tabItem("model_2",
             
             
@@ -405,12 +403,16 @@ body <- dashboardBody(
             
             br(),
             
-            plotOutput(outputId = "final_preds"),
             
             br(),
             
             plotOutput(outputId = "preds_act"),
             
+            br(),
+            
+            br(),
+            
+            plotOutput(outputId = "residuals_glm")
             
             
             
@@ -421,14 +423,8 @@ body <- dashboardBody(
             
             
             dataTableOutput(outputId = "result_tabular_all"),
-            # plotOutput(outputId = "all_predictions"),
-            # 
-            # 
-            # #creates visual space
-            # br(),
-            # 
-            # br(),
-            # 
+          
+            br(), 
             
             #allows a user to select the state that they would like a prediction for
             
@@ -438,32 +434,26 @@ body <- dashboardBody(
             
             br(),
             
+       
+            
+            
+            plotOutput(outputId = "one_state_preds"),
+            
             br(),
             
             
-            plotOutput(outputId = "one_state_preds")
+            br(),
+            
+            
+            plotOutput(outputId = "final_preds")
             
             
             
             
             
             
-            # dataTableOutput("predictions_tabular"),
-            # 
-            # br(),
-            # 
-            # br(),
-            # 
-            # selectInput(inputId = "state_2",
-            #             label = "Select a state that you would like predictions for: ",
-            #             choices = c(state_controls %>% select("State"))),
-            # 
-            # br(),
-            # 
-            # br(),
-            # 
-            # dataTableOutput("predictions_state_tabular")
-            # 
+            
+        
     )
     
     
@@ -1289,8 +1279,14 @@ server <- function(input, output) {
       map_plot = ggplot(map, aes(long, lat, group = group)) +
         geom_polygon(aes(fill = Predicted), color = "white")+
         scale_fill_viridis_c(option = "B", direction=-1)+
-        ggtitle("Predicted COVID Measure (per 100,000) Next Week")
-      map_plot
+        ggtitle("Predicted COVID Measure (per 100,000) Next Week") +
+        theme(axis.text = element_text(size = 16),
+              axis.title = element_text(size = 20, face = "bold"),
+              plot.title = element_text(size = 22, face = "bold"))
+      
+      
+      
+      map_plot 
 
 
     })
@@ -1308,10 +1304,13 @@ server <- function(input, output) {
       #geom_line(aes(y = log(baselineRMSE(test)), color = "#F8766D")) +
       xlab("Log(Observed)") +
       ylab("Log(Predicted)") +
-      ggtitle("Log GLM Prediction v. Observed")
+      ggtitle("Log GLM Prediction v. Observed") +
+      theme(axis.text = element_text(size = 16),
+            axis.title = element_text(size = 20, face = "bold"),
+            plot.title = element_text(size = 22, face = "bold"))
     #scale_colour_manual(name = FALSE, values =c('#00BFC4'='#00BFC4','#F8766D'='#F8766D'),
     #labels = c('45-degree','Baseline')) +
-    theme_bw()
+    #theme_bw()
     
     obs_vs_pred_plot
     
@@ -1324,11 +1323,33 @@ server <- function(input, output) {
     outcome_plot_all = ggplot(outcome_all_glm, aes(x = Date, y = Outcome))+
       geom_point(aes(color = Pred_vs_Obs)) +
       theme_bw()+
-      ggtitle("Glmnet Predictions")
+      ggtitle("Glmnet Predictions") +
+  
+      theme(axis.text = element_text(size = 16),
+            axis.title = element_text(size = 20, face = "bold"),
+            plot.title = element_text(size = 22, face = "bold"))
     
     outcome_plot_all
     
   })
+  
+  output$residuals_glm <- renderPlot({
+    
+    #Plot
+    resids_plot = ggplot(resids, aes(x = Residuals, fill = Model)) +
+      geom_density( color = 'white', alpha = 0.7) +
+      theme_bw() +
+      theme(axis.text = element_text(size = 16),
+            axis.title = element_text(size = 20, face = "bold"),
+            plot.title = element_text(size = 22, face = "bold")) +
+      
+      ggtitle("General Linear Model Residuals")
+    
+    resids_plot
+    
+  })
+  
+  
   
   #Model Building Page ---------------------------------------------------------------------
   
@@ -1500,7 +1521,11 @@ output$state_RMSE_XGB <- renderPlot({
   map_plot = ggplot(map, aes(long, lat, group = group)) +
     geom_polygon(aes(fill = -RMSE), color = "white") +
     
-    ggtitle("XGB RMSE by State")
+    ggtitle("XGB RMSE by State") +
+    
+    theme(axis.text = element_text(size = 16),
+          axis.title = element_text(size = 20, face = "bold"),
+          plot.title = element_text(size = 22, face = "bold"))
   
   map_plot
   
@@ -1546,7 +1571,10 @@ output$residual_plot_xgb <- renderPlot({
   resids_plot = ggplot(resids, aes(x = Residuals, fill = Model)) +
     geom_density( color = 'white', alpha = 0.7) +
     theme_bw() + 
-    ggtitle("XGB Residual Density")
+    ggtitle("XGB Residual Density") +
+    theme(axis.text = element_text(size = 16),
+          axis.title = element_text(size = 20, face = "bold"),
+          plot.title = element_text(size = 22, face = "bold"))
   
   resids_plot
   
