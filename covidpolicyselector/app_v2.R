@@ -21,6 +21,7 @@ library(xgboost)
 library(caret)
 library(fuzzyjoin)
 library(maps)
+library(stringr) # aids with string handling
 # add these libraries 
 # libs = c("tidyverse","data.table","stargazer", "caret", "e1071", "splines",
 #          "randomForest", "C50", "xgboost", "ggplot2", "cowplot", "forecast")
@@ -41,6 +42,19 @@ resids <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/resids.csv")
 merged_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
 
 
+
+#Dictionary of Datasets Created:
+# 
+# - merged_dataset()  — before missingness is dealt with or imputed
+# - data_after_missing() — merged dataset after missingness has been handled
+# - forecast_data() — add the two week forecast columns to the 
+# - top_10() - dataset with the top 10 most important features, after feature selection has concluded
+# 
+# 
+
+
+
+
 #Dashboard Header & Title ---------------------------------------------------------
 header <- dashboardHeader(title = "Machine Learning Pipeline Visualization Using COVID-19 Data",
                           titleWidth = 600)
@@ -57,8 +71,8 @@ sidebar <- dashboardSidebar(
     menuItem("Data Merging", tabName = "merging"),
     menuItem("Data Pre-Processing", tabName = "missing"),
     menuItem("Feature Selection", tabName = "features"),
-    menuItem("Model 1: XGBoost ", tabName = "model_1"),
-    menuItem("Model 2: GLM", tabName = "model_2"),
+    menuItem("Model 1: GLM ", tabName = "model_1"),
+    menuItem("Model 2: XGBoost", tabName = "model_2"),
     menuItem("Results", tabName = "results")
   )
 )
@@ -337,8 +351,36 @@ body <- dashboardBody(
             
     ),
     
-    #XGBoost Page ------------------------------------------------------------------------------
+    
+    
+    #GLM Page --------------------------------------------------
     tabItem("model_1",
+            
+            
+            # plotOutput(outputId = "outcome_all_glm"),
+            # 
+            # br(),
+            # 
+            # 
+            # br(),
+            # 
+            # plotOutput(outputId = "preds_act"),
+            # 
+            # br(),
+            # 
+            # br(),
+            # 
+            # plotOutput(outputId = "residuals_glm")
+            # 
+            # 
+           
+            dataTableOutput(outputId = "testing_glm")
+            
+    ),
+    
+    
+    #XGBoost Page ------------------------------------------------------------------------------
+    tabItem("model_2",
             
             #TEMPORARY TABLE TO HELP WITH DEBUGGING            
            # dataTableOutput(outputId = "testing"),
@@ -395,29 +437,7 @@ body <- dashboardBody(
             
     ),
     
-    #GLM Page --------------------------------------------------
-    tabItem("model_2",
-            
-            
-            plotOutput(outputId = "outcome_all_glm"),
-            
-            br(),
-            
-            
-            br(),
-            
-            plotOutput(outputId = "preds_act"),
-            
-            br(),
-            
-            br(),
-            
-            plotOutput(outputId = "residuals_glm")
-            
-            
-            
-    ),
-    
+   
     
     tabItem("results",
             
@@ -856,18 +876,70 @@ server <- function(input, output) {
   
   #RANDOM FOREST FEATURE SELECTION -----------------------------------
   #creates a reactive dataframe for doing random forest
+  
+  #Creates the forecast data for the generalized linear model
+  
+  # - merged_dataset()  — before missingness is dealt with or imputed
+  # - data_after_missing() — merged dataset after missingness has been handled
+  # - forecast_data() — add the two week forecast columns to the 
+  # - top_10() - dataset with the top 10 most important features, after feature selection has concluded
+  # 
+  #merged_dataset()
+  
+  forecast_data_glm <- reactive({
+    
+    #store the dataset created after handling missingness in a temporary dataframe
+    df <- data_after_missing()
+    
+    #change the column names in the temporary dataframe to lower case
+    names(df) <- tolower(names(df))
+    
+    
+    #changes the name of the outcome column to "y" instead of "covid_measure" for ease of use within the glmnet framework
+    
+    colnames(df)[which(names(df) == "covid_measure")] <- "y"
+    
+    
+    df <- df %>%
+      mutate_at(c('date'), ~ as.Date(., "%Y-%m-%d")) %>%
+      mutate(two_week_forecast_date = date + 14)%>%
+      mutate_if(is.character, as.factor)
+    
+    
+    
+    # Get latest date
+    latest_date = max(df$date)
+    #Two week outcome
+    twoWeek_df = df %>%
+      select(date, state, y) %>%
+      rename(two_week_outcome = y,
+             two_week_forecast_date = date)
+    #Merge with original to create a working df
+    working_df = df %>%
+      left_join(twoWeek_df,
+                by = c("state" = "state",
+                       "two_week_forecast_date" = "two_week_forecast_date")) %>%
+      mutate(year = as.factor(year(two_week_forecast_date)),
+             week = as.factor(week(two_week_forecast_date)))
+    
+    
+    working_df[is.na(working_df)] <-0
+    
+    
+    colnames(working_df)[which(names(working_df) == "y")] <- "two_week_backcast"
+    colnames(working_df)[which(names(working_df) == "two_week_outcome")] <- "y"
+    
+    working_df 
+  })
+  
+  
   randfor_data <- reactive({
     
     #drops columns for random forest
-    drops <-c("Year", "Week", "Date", "two_week_forecast_date") #droping 
+    drops <-c("year", "week", "two_week_forecast_date") #droping 
     
     #drops columns that are in the above vector
-    df <- forecast_data()[, -which(names(forecast_data()) %in% drops)]
-    
-    
-    #changes the names of columns to help with the predictions to follow later
-    colnames(df)[which(names(df) == "covid_measure")] <- "two_week_backcast"
-    colnames(df)[which(names(df) == "two_week_outcome")] <- "y"
+    df <- forecast_data_glm()[, -which(names(forecast_data_glm()) %in% drops)]
     
     
     ##Moving Ouctome Variable to front of dataset for ease of splitting
@@ -887,8 +959,8 @@ server <- function(input, output) {
     
     #creates the x and y dataframes needed for random forests
     end <- ncol(randfor_data)
-    x <- randfor_data[,2:end]
-    y <- randfor_data[,1]
+    x <- as.data.frame(randfor_data[,2:end])
+    y <- as.data.frame(randfor_data[,1])
     
     
     #tune the random forest model
@@ -907,17 +979,20 @@ server <- function(input, output) {
   #returns a data frame with the variable importances (according to node purity) after passing in the cleaned data for random forests
   randfor_model <- function(randfor_data, bestmtry) ({
     
+ 
+    
     rf <- randomForest(y ~ ., mtry = bestmtry, data = randfor_data)
     
     #extracts the variable importances
     features <- as.data.frame(rf$importance)
     features <- as.data.frame(setNames(cbind(rownames(features), features, row.names= NULL), c("Feature", "NodPurity")))
+
     
     
     #extracts the top 10 features with the highest node purity values
-    top <- top_n(features, 10, features$NodPurity)
-    
-    
+     top <- top_n(features, 10, features$NodPurity)
+
+
     return(top)
     
   })
@@ -926,18 +1001,15 @@ server <- function(input, output) {
   
   top_10 <- reactive({
     
-    mtry <- 12
-    randfor_model(randfor_data(), mtry)
+    mtry <- ncol(randfor_data())/3
+    result <- randfor_model(randfor_data(), mtry)
+    result
     
   }) 
   
   
   output$varImp <- renderPlot({
     
-    #mtry  <- ncol(randfor_data())/3
-    #  mtry <- 12
-    #mtry <- bestmtry(randfor_data())
-    #var_imp <- randfor_model(randfor_data(), mtry)
     var_imp <- top_10()
     
     var_imp <- var_imp %>%
@@ -969,9 +1041,13 @@ server <- function(input, output) {
   # })
   
   
-  #Pre-Processing the Data for Feature Selection & Create Required Train/Test/Prediction Data Sets ------------------------------------------------
+# --------------------------- Model Building (GLM Model (model 1) and XGBoost (model 2) Pages) ----------------------------
   
-  #creates the training dataset for the XGBoost model 
+
+
+  # Create Required Train/Test/Prediction Data Sets ------------------------------------------------
+  
+ 
   createTrainSet <- function(forecast_data) {
     
     latest_date = max(forecast_data$Date)
@@ -982,7 +1058,7 @@ server <- function(input, output) {
     return(train)
   }
   
-  #creates a reactive dataframe for the training data 
+  #creates the training dataset for the XGBoost model 
   train_data <- reactive ({
     
     createTrainSet(forecast_data())
@@ -990,12 +1066,19 @@ server <- function(input, output) {
     
   })
   
-  # #creating training data based on random forest
-  # train_data_rf <- reactive({
+  # #creating training data for the general linear model
+  # train_data_glm <- reactive({
   #   
-  #   createTrainSet(randfor_data())
+  #   #holds a temporary dataframe that has the forecasting data with a properly formatted date column
+  #   df <- forecast_data_glm() %>%
+  #     rename("Date" = date)
+  # 
+  #  createTrainSet(df)
   # })
+  # 
   
+
+  # 
   #creates the test set
   createTestSet <- function(forecast_data) {
     
@@ -1017,6 +1100,19 @@ server <- function(input, output) {
     
   })
   
+  
+  
+#   #creating training data based on random forest
+# test_data_glm <- reactive({
+#     
+#     #holds a temporary dataframe that has the forecasting data with a properly formatted date column
+#     df <- forecast_data_glm() %>%
+#       rename("Date" = date)
+#     
+#     createTestSet(df)
+#     
+#   })
+  
   #creates the predictions dataset
   createPredSet <- function(forecast_data) {
     
@@ -1037,13 +1133,17 @@ server <- function(input, output) {
     
   })
   
+  preds_data_glm <- reactive({
+    
+    #holds a temporary dataframe that has the forecasting data with a properly formatted date column
+    df <- forecast_data_glm() %>%
+      rename("Date" = date)
+    
+    createPredSet(df)
+    
+  })
   
-  
-  #data cleaning for glmnet ------------------------------------
-  # top_10_vector <- reactive({
-  #   as.vector(top_10()$Feature)
-  # }) 
-  
+  #--------------------------------------Beginning the GLMNET page (model_1 page)---------------------------------------------
   
   #subsets a given dataframe so that it only includes the 10 most important factors, as determined through random forests
   rf.tops <- function(sample_df) {
@@ -1051,28 +1151,51 @@ server <- function(input, output) {
     top_f <- top_10()$Feature
     
     
-    new <-sample_df %>%
-      select(all_of(c(top_f)))
+    new <- sample_df %>%
+      select(y, all_of(c(top_f)))
     
-    #add back in the "y" outcome and the state column
-    new$y<-sample_df$two_week_outcome
-    new$state <- sample_df$State
-    new$date <- sample_df$Date
     return(new)
   }
   
   
   train_data_glm <- reactive({
     
-    rf.tops(train_data())
+    #holds a temporary dataframe that has the forecasting data with a properly formatted date column
+    df <- forecast_data_glm() %>%
+      rename("Date" = date)
     
+     result <- createTrainSet(df)
+  
+    rf.tops(result)
   })
+  
+  
   
   
   test_data_glm <- reactive({
     
     rf.tops(test_data())
   })
+  
+  
+  #creates a testing dataframe
+
+  # output$testing_glm <- renderDataTable({
+  # 
+  #   DT::datatable(data = train_data_glm(),
+  #                 rownames = FALSE, options = list(scrollX = T))
+  # 
+  # 
+  # })
+  
+  # train_data_glm <- reactive({
+  #   
+  #   rf.tops(train_data())
+  #   
+  # })
+  
+  
+ 
   
   
   preds_data_glm <- reactive({
@@ -1084,7 +1207,6 @@ server <- function(input, output) {
   
   
   
-  #--------Beginning the GLMNET stuff
   
   
   geo_combine<- function(df){
@@ -1255,15 +1377,15 @@ server <- function(input, output) {
   
   
   
-  
-  output$glmtest <- renderDataTable({
-    
-    
-    DT::datatable(data = datatrain_glmnet(),
-                  rownames = FALSE, options = list(scrollX = T))
-    
-  })
-  
+  # 
+  # output$glmtest <- renderDataTable({
+  #   
+  #   
+  #   DT::datatable(data = datatrain_glmnet(),
+  #                 rownames = FALSE, options = list(scrollX = T))
+  #   
+  # })
+  # 
   #Plots -----------
   
   output$final_preds <- renderPlot({
@@ -1351,7 +1473,7 @@ server <- function(input, output) {
   
   
   
-  #Model Building Page ---------------------------------------------------------------------
+  #XG Boost (Model_2) Page ---------------------------------------------------------------------
   
   output$xgb_pls_wait <- renderUI({
     
@@ -1423,7 +1545,7 @@ server <- function(input, output) {
   #displays the forecasted data
   output$forecast <- renderDataTable({
     
-    DT::datatable(data = forecast_data(),
+    DT::datatable(data = forecast_data_glm(),
                   rownames = FALSE,
                   options = list(scrollX = T))
   })
