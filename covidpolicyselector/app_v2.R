@@ -11,7 +11,6 @@ library(shiny)
 library(shinydashboard)
 library(tidyverse)
 library(DT)
-# library(plotly) #used to create interactive plots
 library(glmnet) # to perform L1 regularization
 library(tidymodels)
 library(covidcast)
@@ -29,18 +28,6 @@ library(stringr) # aids with string handling
 
 #read in static datasets -- controls only and the sample user input data
 state_controls <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/state_controls.csv")
-
-user_input_example <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/user_input_policies_full_example.csv")
-
-#geo <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/us-zip-code-latitude-and-longitude.csv", header= FALSE, stringsAsFactors = FALSE)
-
-final_preds <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/final_preds.csv")
-preds_act <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/preds_act.csv")
-outcome_all_glm <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/outcome_all.csv")
-resids <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/resids.csv")
-
-merged_ex <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/shiny_merged_dataset_example.csv")
-
 
 
 #Dictionary of Datasets Created:
@@ -314,11 +301,7 @@ body <- dashboardBody(
     #Feature Selection page ------------------------------------------------------------------------------
     tabItem("features",
             
-            
-            
-            #TEMPORARILY displays the results of random forest
-            #dataTableOutput(outputId = "rand_for"),
-            
+          
             #Gives the user a message to describe the data table
             htmlOutput(outputId = "forecast_table"),    
             
@@ -357,34 +340,31 @@ body <- dashboardBody(
     tabItem("model_1",
             
             
-            # plotOutput(outputId = "outcome_all_glm"),
-            # 
-            # br(),
-            # 
-            # 
-            # br(),
-            # 
-            # plotOutput(outputId = "preds_act"),
-            # 
-            # br(),
-            # 
-            # br(),
-            # 
-            # plotOutput(outputId = "residuals_glm")
-            # 
-            # 
+            plotOutput(outputId = "outcome_all_glm"),
+
+            br(),
+
+
+            br(),
+
+            plotOutput(outputId = "preds_act"),
+
+            br(),
+
+            br(),
+
+            plotOutput(outputId = "residuals_glm")
+
+
            
-            dataTableOutput(outputId = "testing_glm")
-            
+            # dataTableOutput(outputId = "testing_glm"),
+            # dataTableOutput(outputId = "testing_glm_2")
+            # 
     ),
     
     
     #XGBoost Page ------------------------------------------------------------------------------
     tabItem("model_2",
-            
-            #TEMPORARY TABLE TO HELP WITH DEBUGGING            
-           # dataTableOutput(outputId = "testing"),
-            
             
             #click to run the XGBoost model
             actionButton(inputId = "runxgb",
@@ -1029,17 +1009,6 @@ server <- function(input, output) {
   
   
   
-  # output$rand_for <- renderDataTable({
-  #   
-  #  # mtry <- bestmtry(randfor_data())
-  #   mtry  <- ncol(randfor_data())/3
-  #   var_imp <- randfor_model(randfor_data(), mtry)
-  # 
-  #   DT::datatable(data = var_imp,
-  #                 rownames = FALSE,
-  #                 options = list(scrollX = T))
-  # })
-  
   
 # --------------------------- Model Building (GLM Model (model 1) and XGBoost (model 2) Pages) ----------------------------
   
@@ -1066,19 +1035,7 @@ server <- function(input, output) {
     
   })
   
-  # #creating training data for the general linear model
-  # train_data_glm <- reactive({
-  #   
-  #   #holds a temporary dataframe that has the forecasting data with a properly formatted date column
-  #   df <- forecast_data_glm() %>%
-  #     rename("Date" = date)
-  # 
-  #  createTrainSet(df)
-  # })
-  # 
-  
 
-  # 
   #creates the test set
   createTestSet <- function(forecast_data) {
     
@@ -1102,17 +1059,6 @@ server <- function(input, output) {
   
   
   
-#   #creating training data based on random forest
-# test_data_glm <- reactive({
-#     
-#     #holds a temporary dataframe that has the forecasting data with a properly formatted date column
-#     df <- forecast_data_glm() %>%
-#       rename("Date" = date)
-#     
-#     createTestSet(df)
-#     
-#   })
-  
   #creates the predictions dataset
   createPredSet <- function(forecast_data) {
     
@@ -1133,15 +1079,7 @@ server <- function(input, output) {
     
   })
   
-  preds_data_glm <- reactive({
-    
-    #holds a temporary dataframe that has the forecasting data with a properly formatted date column
-    df <- forecast_data_glm() %>%
-      rename("Date" = date)
-    
-    createPredSet(df)
-    
-  })
+
   
   #--------------------------------------Beginning the GLMNET page (model_1 page)---------------------------------------------
   
@@ -1152,8 +1090,9 @@ server <- function(input, output) {
     
     
     new <- sample_df %>%
-      select(y, all_of(c(top_f)))
-    
+      select(y, all_of(top_f))
+
+  
     return(new)
   }
   
@@ -1165,58 +1104,64 @@ server <- function(input, output) {
       rename("Date" = date)
     
      result <- createTrainSet(df)
-  
+     
+     names(result) <- tolower(names(result))
+     
+
     rf.tops(result)
   })
   
   
   
-  
   test_data_glm <- reactive({
     
-    rf.tops(test_data())
-  })
-  
-  
-  #creates a testing dataframe
+    #holds a temporary dataframe that has the forecasting data with a properly formatted date column
+        df <- forecast_data_glm() %>%
+          rename("Date" = date)
 
-  # output$testing_glm <- renderDataTable({
-  # 
-  #   DT::datatable(data = train_data_glm(),
-  #                 rownames = FALSE, options = list(scrollX = T))
-  # 
-  # 
-  # })
-  
-  # train_data_glm <- reactive({
-  #   
-  #   rf.tops(train_data())
-  #   
-  # })
-  
+        result <- createTestSet(df)
+        
+        names(result) <- tolower(names(result))
+        
+
+        rf.tops(result)
+  })
   
  
-  
-  
   preds_data_glm <- reactive({
     
-    rf.tops(preds_data())
+    #holds a temporary dataframe that has the forecasting data with a properly formatted date column
+    df <- forecast_data_glm() %>%
+      rename("Date" = date)
+    
+    result <- createPredSet(df)
+    
+    names(result) <- tolower(names(result))
+    
+    
+    rf.tops(result)
+    
   })
   
   
+
+#------------------ CREATES THE GEOTAGGING REQUIRED FOR GLMNET ------------------------------- #
+  
+  #Data from: https://public.opendatasoft.com/explore/dataset/us-zip-code-latitude-and-longitude/export/ 
+  #Process needed to create 2D for 'state' to be incorporated into GLM with poly option 
+
+  #Geotagging for glmnet
   
   
-  
-  
-  
-  geo_combine<- function(df){
+geo_combine<- function(df){
     geo <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/us-zip-code-latitude-and-longitude.csv", header= FALSE, stringsAsFactors = FALSE)
+   # geo <- read.csv("https://github.com/Mika-Tal/Covid-19-Closure-Impact/blob/main/Data/us-zip-code-latitude-and-longitude.csv", header = FALSE, stringsAsFactors = FALSE)
     geo<- as.data.frame(geo)
-    geo<-geo%>% separate(V1, into=c("Zip", "City", "State", "Latitude","Longitude","Timezone","Daylight_savings", "geopoint"), sep=";" )
+    geo<-geo %>% separate(V1, into=c("Zip", "City", "State", "Latitude","Longitude","Timezone","Daylight_savings", "geopoint"), sep=";" )
     geo<- geo[-1,]
-    geo$Latitude<-as.numeric(geo$Latitude)
-    geo$Longitude<-as.numeric(geo$Longitude)
-    names(geo) <-tolower(names(geo))
+    geo$Latitude<- as.numeric(geo$Latitude)
+    geo$Longitude<- as.numeric(geo$Longitude)
+    names(geo) <- tolower(names(geo))
     
     state_latLong <- geo%>%
       group_by(state)%>%
@@ -1226,35 +1171,34 @@ server <- function(input, output) {
     return(left_join(df, state_latLong, by='state'))
   }
   
-  
+
   #add state longitude and latitude data to the training, testing, and predictions datasets
   datatrain_lm<- reactive({
     
     geo_combine(train_data_glm())
     
   })
+  
+  
+
   datatest_lm<- reactive({
     geo_combine(test_data_glm())
     
   })
+  
   datapreds_lm <- reactive({
     
     geo_combine(preds_data_glm())
     
   })
   
-  
+
   
   cleaning_lm<- function(df){
-    #df1 <- df[, -which(names(df) %in% c("state"))]#%>% 
-    
+
     df1 <- df %>% select(-c("state"))
     
-    
-    #select(-1) #removing 'id'
-    col_idx <- grep("^y$", names(df1))
-    df1 <- df1[, c(col_idx, (1:ncol(df1))[-col_idx])]
-    
+  
     #dropping date, cannot create a poly w/ cbind() after polys created
     date_hold<- as.data.frame(df1$date)
     colnames(date_hold)<-"date"
@@ -1275,11 +1219,15 @@ server <- function(input, output) {
   
   
   
+
   datatrain_poly<- reactive({
     
     cleaning_lm(datatrain_lm())
     
-  }) 
+  })
+  
+  
+  
   datatest_poly <- reactive({
     
     cleaning_lm(datatest_lm())
@@ -1293,8 +1241,9 @@ server <- function(input, output) {
     
   })
   
+
   
-  #Creating the Model Matrices for the Glmnet model ---------------------------
+  #Creating the Model Matrices for the GLMnetmodel ---------------------------
   
   createGLM_modelmat <- function(poly_df) {
     
@@ -1317,6 +1266,7 @@ server <- function(input, output) {
   })
   
   
+  
   datatest_glmnet <- reactive ({
     
     createGLM_modelmat(datatest_poly())
@@ -1329,7 +1279,7 @@ server <- function(input, output) {
   })
   
   
-  #Training GLMNnet -------------------
+ #-------------------------------Training GLMNnet -------------------
   
   trainGLM_Model <- function(datatrain_glmnet) {
     
@@ -1348,7 +1298,20 @@ server <- function(input, output) {
   })
   
   
-  #Predicting with glmnet -------------------
+#-----------------INSERT COEFFICENTS INFO HERE --------------------#
+  
+#creates a testing dataframe
+  
+  # output$testing_glm <- renderDataTable({
+  # 
+  #   DT::datatable(data = as.matrix(coef(train_glm())),
+  #                 rownames = FALSE, options = list(scrollX = T))
+  # 
+  # 
+  # })
+  
+  
+#----------------------------------Predicting with glmnet -------------------
   predictGLM_Model <- function(train_glm, new_data) {
     
     lamMin<- min(train_glm[["lambda"]])
@@ -1369,31 +1332,87 @@ server <- function(input, output) {
     as.data.frame(test)
   })
   
-  
-  preds_set_predictions <- reactive({
+  glm_test <- reactive({
     
-    predictGLM_Model(train_glm(), datapreds_glmnet())
+    as.data.frame(datatest_glmnet())
+    
+  })
+  
+  preds_act <- reactive({
+    
+   preds_act <- cbind(test_set_predictions(), glm_test()$y)
+  
+   preds_act$Observed<- preds_act[,1]
+   preds_act$Predicted<- preds_act[,2]
+   
+   preds_act <- preds_act %>%
+     select(Observed, Predicted)
+   
+  
+  # need to run the createPredSet function again to recover the two_week_forecast_date variable
+   df <- forecast_data_glm() %>%
+     rename("Date" = date)
+   
+   result <- createPredSet(df)
+  
+   names(result) <- tolower(names(result))
+
+
+   preds_act$two_week_forecast_date <- result$two_week_forecast_date
+   
+   preds_act
+   
+    
   })
   
   
+  RMSE_glm <- reactive({
+    
+    sqrt(mean(preds_act()[,2] - preds_act()[,1])^2)
+    
+    
+  })
+
+
+  preds_set_predictions <- reactive({
+    
+    preds <-  predictGLM_Model(train_glm(), datapreds_glmnet())
+    as.data.frame(preds)
+  })
   
+final_preds <- reactive({
+  
+  final_preds <- cbind(preds_set_predictions(), datapreds_lm())
+  final_preds$Predicted <- final_preds[,1]
+  
+  final_preds
+  
+  
+  
+})
+  
+  # output$testing_glm_2 <- renderDataTable({
   # 
-  # output$glmtest <- renderDataTable({
-  #   
-  #   
-  #   DT::datatable(data = datatrain_glmnet(),
+  #   DT::datatable(data = final_preds(),
   #                 rownames = FALSE, options = list(scrollX = T))
-  #   
+  # 
+  # 
   # })
   # 
-  #Plots -----------
+  
+  
+  
+  
+ 
+#------------------------------------------------ Plots --------------------------------
   
   output$final_preds <- renderPlot({
 
 
-      final_preds = final_preds %>%
+      final_preds = final_preds() %>%
         mutate(state = tolower(setNames(state.name, state.abb)[state]))
-      #create map data
+     
+      
       #create map data
       map = map_data("state") %>%
         full_join(final_preds, by = c("region" = "state"))
@@ -1415,7 +1434,10 @@ server <- function(input, output) {
   
   
   output$preds_act  <- renderPlot({
-    obs_vs_pred = preds_act %>% 
+    
+    
+    
+    obs_vs_pred = preds_act() %>% 
       mutate(Observed = log(Observed),
              Predicted = log(Predicted))
     
@@ -1442,11 +1464,32 @@ server <- function(input, output) {
   
   output$outcome_all_glm <- renderPlot({
     
-    outcome_plot_all = ggplot(outcome_all_glm, aes(x = Date, y = Outcome))+
+    #get the training data
+    df <- forecast_data_glm() %>%
+      rename("Date" = date)
+    
+    datatrain <- createTrainSet(df)
+    
+    names(datatrain) <- tolower(names(datatrain))
+    
+    
+    #Plot Predictions
+    outcome_all = datatrain %>% 
+      select(two_week_forecast_date, y) %>%
+      rename(Date = two_week_forecast_date,
+             Outcome = y) %>% 
+      mutate (Pred_vs_Obs = "Observed") %>% 
+      rbind(tibble(Date = preds_act()$two_week_forecast_date,
+                   Outcome = preds_act()$Predicted,
+                   Pred_vs_Obs = "Predicted"))
+    
+    
+  
+    outcome_plot_all = ggplot(outcome_all, aes(x = Date, y = Outcome))+
       geom_point(aes(color = Pred_vs_Obs)) +
       theme_bw()+
       ggtitle("Glmnet Predictions") +
-  
+      
       theme(axis.text = element_text(size = 16),
             axis.title = element_text(size = 20, face = "bold"),
             plot.title = element_text(size = 22, face = "bold"))
@@ -1456,6 +1499,22 @@ server <- function(input, output) {
   })
   
   output$residuals_glm <- renderPlot({
+    
+    reds<- as.data.frame(preds_act()$Predicted-preds_act()$Observed)
+    
+    
+    GLMResids = preds_act() %>% 
+      mutate(Model = "GLM") %>% 
+      mutate(Residuals = Predicted - Observed) %>% 
+      select(Residuals, Model)
+    #df for baseline residuals
+    BLResids = tibble(Residuals = mean(datatest_poly()$two_week_backcast) - datatest_poly()$y,
+                      Model = "Baseline")
+    
+    #Combine dfs for the plot
+    resids = GLMResids %>% 
+      bind_rows(BLResids)
+    
     
     #Plot
     resids_plot = ggplot(resids, aes(x = Residuals, fill = Model)) +
@@ -1473,7 +1532,7 @@ server <- function(input, output) {
   
   
   
-  #XG Boost (Model_2) Page ---------------------------------------------------------------------
+# ------------------------------------XG Boost (Model_2) Page ---------------------------------------------------------------------
   
   output$xgb_pls_wait <- renderUI({
     
@@ -1899,7 +1958,7 @@ output$residual_plot_xgb <- renderPlot({
   output$result_tabular_all <- renderDataTable({
     
     XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
-    preds_glm <- final_preds$Predicted
+    preds_glm <- final_preds()$Predicted
     test <- test_data()
     
     baseline = test %>%  
@@ -1914,7 +1973,7 @@ output$residual_plot_xgb <- renderPlot({
       (baseline$two_week_outcome - baseline$average_outcome) ^ 2 ) )
     
     
-    Results = data.frame(Prediction = test$two_week_outcome,
+    results = data.frame(Prediction = test$two_week_outcome,
                          Model = rep("Baseline", nrow(test)),
                          RMSE = BLRMSE) %>% 
       bind_rows(data.frame(Prediction  = XGBPredsPred,
@@ -1929,20 +1988,13 @@ output$residual_plot_xgb <- renderPlot({
                 RMSE = mean(RMSE)) 
       
     
-       Results
+       results
     
   })
   
 
   
-  #Add charts and tables for the prediction comparison
-  
-  #report the RMSE
-  
-  #covid_dataset(), userdata(), state_controls
-  
-  
-  
+
 }
 
 # Run the application 
