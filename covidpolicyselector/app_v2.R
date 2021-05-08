@@ -1401,9 +1401,31 @@ final_preds <- reactive({
   # 
   
   
+#-------
+
+#datatrain_log <-datatrain_poly
+#datatrain_log <- subset(datatrain_log, y>0)
+#datatrain_log$y <-log(datatrain_log$y)  
+
+#datatrain_glmnet_log<- datatrain_log %>%
+ # mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
+ # model.matrix(object= ~ .-1, . , contrasts.arg =
+              #   lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
+                 #       contrasts, contrasts = FALSE))
+#train_glm_log<- glmnet(
+ # x = datatrain_glmnet_log[,-1],
+ # y = datatrain_glmnet_log[,1], relax = FALSE, nfolds= 3)
+
+#attempt1<-coef.glmnet(datatrain_glmnet, s=lamMin)
+
+#glm_col_names <- names(as.data.frame(datatrain_glmnet_log))
+#glm_coef_table<- as.data.frame(matrix(coef.glmnet(train_glm_log, s=lamMin)))
+
+#glm_coef_table$Variables<- glm_col_names
+#glm_coef_table<-glm_coef_table%>% rename(Coefficient = 'V1')
+#glm_coef_table[1,2]<- "Intercept"
   
-  
- 
+#HTML(paste("Coefficients can be interpreted as for each unit of change of the independent (variable) there is that coefficient of percentage change in your COVID-19 measure", sep = "<br/><br/>"))
 #------------------------------------------------ Plots --------------------------------
   
   output$final_preds <- renderPlot({
