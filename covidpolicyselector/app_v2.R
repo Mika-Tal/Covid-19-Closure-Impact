@@ -5,12 +5,15 @@
 # devtools::install_github("cmu-delphi/covidcast", ref = "main",
 #                          subdir = "R-packages/covidcast")
 
+# In order to run our app locally, a user would need to install the following packages:
+#
+
 #Load in necessary libraries
 
-library(shiny)
-library(shinydashboard)
+library(shiny) #enables the use of shiny functionality
+library(shinydashboard) #allows for the creation of a dashboard using shiny
 library(tidyverse)
-library(DT)
+library(DT) #provides easy to use data tables within shiny
 library(glmnet) # to perform L1 regularization
 library(tidymodels)
 library(covidcast)
