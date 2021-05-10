@@ -44,8 +44,8 @@ library(maps)
 library(stringr) # aids with string handling
 
 #read in static datasets -- controls only and the user ingestion template
-state_controls <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/covid19forecast/state_controls.csv")
-user_input_template <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/covid19forecast/user_input_template.csv")
+state_controls <- read.csv("state_controls.csv")
+user_input_template <- read.csv("user_input_template.csv")
 
 
 #Dictionary of Datasets Created:
@@ -1190,8 +1190,7 @@ server <- function(input, output) {
   
   #returns a geotagged dataframe 
   geo_combine<- function(df){
-    geo <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/covid19forecast/us-zip-code-latitude-and-longitude.csv", header= FALSE, stringsAsFactors = FALSE)
-    # geo <- read.csv("https://github.com/Mika-Tal/Covid-19-Closure-Impact/blob/main/Data/us-zip-code-latitude-and-longitude.csv", header = FALSE, stringsAsFactors = FALSE)
+    geo <- read.csv("us-zip-code-latitude-and-longitude.csv", header= FALSE, stringsAsFactors = FALSE)
     geo<- as.data.frame(geo)
     geo<-geo %>% separate(V1, into=c("Zip", "City", "State", "Latitude","Longitude","Timezone","Daylight_savings", "geopoint"), sep=";" )
     geo<- geo[-1,]
