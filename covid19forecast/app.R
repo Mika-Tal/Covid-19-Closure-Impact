@@ -8,16 +8,33 @@
 
 #Load in necessary libraries
 
+
+# library(grDevices)
+# library(httr)
+# library(MMWRweek)
+# library(purrr)
+# library(rlang)
+# library(sf)
+# library(gridExtra)
+# library(httptest)
+# library(knitr) 
+# library(mockery)
+# library(rmarkdown)
+# library(testthat)
+# library(tibble)
+# library(vdiffr)
+
+#knitr, mockery, rmarkdown, testthat, tibble, vdiffr
+
+#install.packages("covidcast")
+library(covidcast)
+
 library(shiny) #enables the use of shiny functionality
 library(shinydashboard) #allows for the creation of a dashboard using shiny
 library(tidyverse)
 library(DT) #provides easy to use data tables within shiny
 library(glmnet) # to perform L1 regularization
 library(tidymodels)
-devtools::install_github("cmu-delphi/covidcast", ref = "main",
-                         subdir = "R-packages/covidcast")
-
-library(covidcast)
 library(lubridate)
 library(randomForest)
 library(xgboost)

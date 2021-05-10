@@ -5,8 +5,8 @@ account: tobijegede
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 4110758
-bundleId: 4583122
+bundleId: 4583167
 url: https://tobijegede.shinyapps.io/covid19forecast/
-when: 1620683531.79035
+when: 1620684498.52556
 asMultiple: FALSE
 asStatic: FALSE
