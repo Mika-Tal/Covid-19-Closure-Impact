@@ -48,7 +48,7 @@ header <- dashboardHeader(title = "Machine Learning Pipeline Visualization Using
 
 #Dashboard Sidebar --------------------------------------------------
 
-sidebar <- dashboardSidebar(
+sidebar <- dashboardSidebar(width = 250,
   sidebarMenu(
     id = "tabs",
     
@@ -397,10 +397,6 @@ body <- dashboardBody(
               br(), 
             
             
-              
-              #creates visual space
-              br(),
-              br(),
             
             
               #once the "Run XG Boost button has run, display the following information:"
@@ -417,6 +413,7 @@ body <- dashboardBody(
                     )
                     ),
                     
+                    br(),
                     br(),
                     
                     #creates a datatable that presents the model specifications for the xg boost model
@@ -475,7 +472,7 @@ body <- dashboardBody(
             br(),
             
             #shows a map of the predicted covid cases per 100,000 at a national level
-            plotOutput(outputId = "final_preds")
+            plotOutput(outputId = "forecast_by_state")
             
     )
     
@@ -1485,7 +1482,7 @@ output$glm_coefs <- renderDataTable({
 })
 
 
-#------- STEP 8b: CREATE GLM LOG GLM PREDICTIONS VS OBSERVED PLOT ---------#
+#------- STEP 8b: CREATE GLM LOG  PREDICTIONS VS OBSERVED PLOT ---------#
 
 output$preds_act  <- renderPlot({
   
@@ -1548,31 +1545,20 @@ output$residuals_glm <- renderPlot({
 })
 
 
-
-
-  
-
-  
-  
- 
-  
-  
   
 # ------------------------------------XG Boost (Model_2) Page ---------------------------------------------------------------------
   
 
-  
+#displays a label before displaying the model specifications
   output$display_model <- renderUI({
     
     HTML(paste("Here's the Model Specification for the Best Tuned XGBoost Model:", sep = "<br/><br/>"))
     
   })
+
+#STEP 1: TRAIN XGBoost Model ------------------------------
   
-  
-  
-  
-  
-  
+ #returns the trained XGBoost Model
   trainXGBoost <- function(train_df) {
     
     #Convert the predictor variable matrices to xgb.DMatrix data types
@@ -1611,28 +1597,9 @@ output$residuals_glm <- renderPlot({
     
   }
   
+
   
-  
-  #displays the title for the forecasting table that is to be displayed
-  output$forecast_table <- renderUI({
-    
-    HTML(paste("Here's The Dataset Including the Two Week Forecasts:", sep = "<br/><br/>"))
-    
-  })
-  
-  
-  #displays the forecasted data
-  output$forecast <- renderDataTable({
-    
-    DT::datatable(data = forecast_data_glm(),
-                  rownames = FALSE,
-                  options = list(scrollX = T))
-  })
-  
-  #creates the XGB model to be used by the later functions
-  
-  
-  #captures the results of running the XGB model
+  #captures the results of running the XGB model in a reactive dataframe
   xgb_model_output <- eventReactive(input$runxgb, {
     
     trainXGBoost(train_data())
@@ -1653,9 +1620,9 @@ output$residuals_glm <- renderPlot({
     
   })
   
+
+#STEP 2: GET PREDICTIONS FOR OTHER DATASETS USING THE TRAINED XGBOOST MODEL---------------------------------
   
-  # #predictions using the different datasets 
-  #  
   #Get predctions based on XGB mmodel
   XGBpredictions <- function(model, data){
     #Convert data frame into dense matrix for XGB model
@@ -1675,19 +1642,8 @@ output$residuals_glm <- renderPlot({
   })
   
   
-  
 
-  # RMSE = function(test, XGBPredsTest){
-  #   #Calculate RMSE
-  #   RMSE = sqrt(mean ((test$two_week_outcome - XGBPredsTest) ^ 2 ) )
-  #   return(RMSE)
-  # }
-  
-  
-  
-
-
-
+#returns the performance (RMSE) of the model by state
 RMSE_by_state = function (test, XGBPredsTest){
   
   # test_data(), test_data_preds()
@@ -1706,13 +1662,63 @@ RMSE_by_state = function (test, XGBPredsTest){
   
 }
 
-  
+#captures the resulting dataframe for calculating the RMSE for COVID-19 predictions by state
 RMSE_by_state_df <- reactive({
   
   RMSE_by_state(test_data(), test_data_preds())
 })
 
 
+
+#STEP 3: CREATE VISUAL REPRESENTATIONS FOR THE OUTPUT FROM THE XG BOOST MODEL -----------------------------------------------------------
+
+
+#-------STEP 3a: PLOT OF PREDICTED VERSUS OBSERVED OBSERVATIONS OF THE XGBoost Model (compared to the baseline average) ----------#
+
+#creates a dataframe that compares the predicted versus actual values
+combinedObvsPredsDf <- function(test, predicted){
+  
+  #Create dataframe
+  obs_vs_pred = test %>%
+    select(two_week_outcome) %>%
+    rename(Observed = two_week_outcome) %>%
+    bind_cols(tibble(Predicted = predicted)) %>%
+    mutate(Observed = log(Observed),
+           Predicted = log(Predicted))
+  
+  return(obs_vs_pred)
+  
+}
+
+
+
+#creates the log predicted versus observed observations usingthe XGBoost Model
+output$preds_vs_observed <- renderPlot({
+  
+  new_df <- combinedObvsPredsDf(test_data(), test_data_preds())
+  
+  
+  #creates the required dataframe
+  new_df %>%
+    ggplot(aes(x = Observed, y = Predicted)) +
+    geom_point() +
+    geom_abline() +
+    xlab("Log(Observed)") +
+    ylab("Log(Predicted)") +
+    theme(axis.text = element_text(size = 16),
+          axis.title = element_text(size = 20, face = "bold"),
+          plot.title = element_text(size = 22, face = "bold")) +
+    ggtitle("XGB Actual vs. Predicted")
+  
+  
+  
+  
+})
+
+
+#-------STEP 3b: PLOT OF RMSE BY STATE-----------#
+
+#outputs a map plot of the RMSE by state
 output$state_RMSE_XGB <- renderPlot({
   
   #create map data 
@@ -1733,17 +1739,8 @@ output$state_RMSE_XGB <- renderPlot({
 })
 
 
-output$xgb_table <- renderDataTable({
   
-  
-  DT::datatable(data = RMSE_by_state_df(),
-                rownames = FALSE, options = list(scrollX = T))
-  
-  
-  
-})
-  
-#test_data(), test_data_preds()
+#-------STEP 3c: PLOT OF RESIDUALS OF THE XGBoost Model (compared to the baseline average) ----------#
 
 output$residual_plot_xgb <- renderPlot({
   
@@ -1781,58 +1778,50 @@ output$residual_plot_xgb <- renderPlot({
   
 })
 
+#--------------------------------- RESULTS OUTPUT PAGE ---------------------------------------
+
+output$result_tabular_all <- renderDataTable({
+  
+  XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
+  preds_glm <- final_preds()$Predicted
+  test <- test_data()
+  
+  baseline = test %>%  
+    select(covid_measure, two_week_outcome) %>% 
+    mutate(average_outcome = mean(covid_measure)) 
+  
+  XGBRMSE = sqrt(mean ((test$two_week_outcome - XGBPredsPred) ^ 2 ) )
+  
+  GLMRMSE = sqrt(mean ((test$two_week_outcome - preds_glm) ^ 2 ) )
+  
+  BLRMSE = sqrt(mean (
+    (baseline$two_week_outcome - baseline$average_outcome) ^ 2 ) )
+  
+  
+  results = data.frame(Prediction = test$two_week_outcome,
+                       Model = rep("Baseline", nrow(test)),
+                       RMSE = BLRMSE) %>% 
+    bind_rows(data.frame(Prediction  = XGBPredsPred,
+                         Model = rep("XGB", length(XGBPredsPred)),
+                         RMSE = XGBRMSE)) %>%
+    bind_rows(data.frame(Prediction = as.vector(preds_glm),
+                         Model = rep("GLM", length(preds_glm)),
+                         RMSE = GLMRMSE)) %>% 
+    group_by(Model) %>% 
+    summarise(Total = sum(Prediction),
+              AvgPerState = mean(Prediction),
+              RMSE = mean(RMSE)) 
+  
+  
+  results
+  
+})
+
+
+#prints out the results of running the XGBoost Model in tabular form
 
   
-  
-  combinedObvsPredsDf <- function(test, predicted){
-    
-    #Create dataframe
-    obs_vs_pred = test %>%
-      select(two_week_outcome) %>%
-      rename(Observed = two_week_outcome) %>%
-      bind_cols(tibble(Predicted = predicted)) %>%
-      mutate(Observed = log(Observed),
-             Predicted = log(Predicted))
-    
-    return(obs_vs_pred)
-    
-  }
-  
-  
-  output$testing <- renderDataTable({
-    
-    new_df <- combinedObvsPredsDf(test_data(), test_data_preds())
-    
-    
-    DT::datatable(data = new_df,
-                  rownames = FALSE, options = list(scrollX = T))
-    
-  })
-  
-  output$preds_vs_observed <- renderPlot({
-    
-    new_df <- combinedObvsPredsDf(test_data(), test_data_preds())
-    
-    
-    #creates the required dataframe
-    new_df %>%
-      ggplot(aes(x = Observed, y = Predicted)) +
-      geom_point() +
-      geom_abline() +
-      xlab("Log(Observed)") +
-      ylab("Log(Predicted)") +
-      theme(axis.text = element_text(size = 16),
-            axis.title = element_text(size = 20, face = "bold"),
-            plot.title = element_text(size = 22, face = "bold")) +
-      ggtitle("XGB Actual vs. Predicted")
-    
-    
-    
-    
-  })
-  
-  #creates a new reactive dataframe
-  
+  #creates a new reactive dataframe thart includes all of the predictions across all the staes
   outcome_all <- reactive({
     
     XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
@@ -1848,30 +1837,9 @@ output$residual_plot_xgb <- renderPlot({
     
     
   })
+
   
-  
-  
-  
-  
-  
-  #plots the resulting predictions
-  output$all_predictions <- renderPlot({
-    
-    outcome_all() %>% 
-      
-      ggplot(aes(x = Date, y = Outcome)) +
-      
-      geom_point(aes(color = Pred_vs_Obs))  +
-      theme(axis.text = element_text(size = 16),
-            axis.title = element_text(size = 20, face = "bold"),
-            plot.title = element_text(size = 22, face = "bold"))
-    
-    
-    
-  })
-  
-  
-  
+  #reutrns predictions from the XGBoost model for one state
   createPredState <- function(forecast_data, state) {
     
     latest_date = max(forecast_data$Date)
@@ -1888,7 +1856,7 @@ output$residual_plot_xgb <- renderPlot({
     
   })
   
-  
+  #returns the XG Boost Model predictions for the singular tate that the user selects
   outcome_state <- reactive({
     
     XGBModel_state <- XGBpredictions(xgb_model_output(), pred_state())
@@ -1905,7 +1873,7 @@ output$residual_plot_xgb <- renderPlot({
     
   })
   
-  
+#outputs the results of the predictions for one state as a plot
   output$one_state_preds <- renderPlot({
     
     outcome_state() %>% 
@@ -1917,121 +1885,55 @@ output$residual_plot_xgb <- renderPlot({
       theme(axis.text = element_text(size = 16),
             axis.title = element_text(size = 20, face = "bold"),
             plot.title = element_text(size = 22, face = "bold"))
-    
-    
-    
-    
-    
+ 
   })
   
+
   
-  #Results Page -----------------------------------------------------------
+  # #prints out the predictions by state
+  # output$predictions_state_tabular <- renderDataTable({
+  #   
+  #   #Create week labels column
+  #   Week = c("Week_1", "Week_2")
+  #   
+  #   #Summarise predictions by prediction week
+  #   XGBPredsState <- XGBpredictions(xgb_model_output(), pred_state_2())
+  #   
+  #   preds_state = data.frame(Week = Week, Prediction  = XGBPredsState) 
+  #   
+  #   DT::datatable(data = preds_state,
+  #                 rownames = FALSE, options = list(scrollX = T))
+  #   
+  # })
+  # 
   
-  
-  #prints out the results of running the XGBoost Model in tabular form
-  output$predictions_tabular <- renderDataTable({
+
+#creates a map plot of the expected forecast in two weeks (nationally)
+  output$forecast_by_state <- renderPlot({
     
-    #Create week labels column
-    Week = rep("Week_1", 51) %>% c(rep("Week_2", 51))
+    #Predict on Pred set using XGB model
+    XGBPredsPred = XGBpredictions(xgb_model_output(), preds_data())
     
-    XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
+    #Create state-prediction df
+    forecast_by_state = data.frame( State = preds_data()$State,
+                                    Predictions = XGBPredsPred) %>%
+      mutate(State = tolower(setNames(state.name, state.abb)[State]))
     
-    
-    
-    #Summarise predictions by prediction week
-    preds_all = data.frame(Prediction  = XGBPredsPred, Week = Week) %>%
-      group_by(Week) %>% 
-      summarise(Total = sum(Prediction),
-                Average = mean(Prediction))
-    
-    DT::datatable(data = preds_all,
-                  rownames = FALSE, options = list(scrollX = T))
-    
-    
-  })
-  
-  #another reactive object for the second state input option
-  pred_state_2 <- reactive({
-    
-    createPredState(forecast_data(), input$state_2)
-    
-  })
-  
-  
-  #prints out the predictions by state
-  output$predictions_state_tabular <- renderDataTable({
-    
-    #Create week labels column
-    Week = c("Week_1", "Week_2")
-    
-    #Summarise predictions by prediction week
-    XGBPredsState <- XGBpredictions(xgb_model_output(), pred_state_2())
-    
-    preds_state = data.frame(Week = Week, Prediction  = XGBPredsState) 
-    
-    DT::datatable(data = preds_state,
-                  rownames = FALSE, options = list(scrollX = T))
-    
-  })
-  
-  
-  output$result_tabular_all <- renderDataTable({
-    
-    XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
-    preds_glm <- final_preds()$Predicted
-    test <- test_data()
-    
-    baseline = test %>%  
-      select(covid_measure, two_week_outcome) %>% 
-      mutate(average_outcome = mean(covid_measure)) 
-    
-    XGBRMSE = sqrt(mean ((test$two_week_outcome - XGBPredsPred) ^ 2 ) )
-    
-    GLMRMSE = sqrt(mean ((test$two_week_outcome - preds_glm) ^ 2 ) )
-    
-    BLRMSE = sqrt(mean (
-      (baseline$two_week_outcome - baseline$average_outcome) ^ 2 ) )
-    
-    
-    results = data.frame(Prediction = test$two_week_outcome,
-                         Model = rep("Baseline", nrow(test)),
-                         RMSE = BLRMSE) %>% 
-      bind_rows(data.frame(Prediction  = XGBPredsPred,
-                           Model = rep("XGB", length(XGBPredsPred)),
-                           RMSE = XGBRMSE)) %>%
-      bind_rows(data.frame(Prediction = as.vector(preds_glm),
-                           Model = rep("GLM", length(preds_glm)),
-                           RMSE = GLMRMSE)) %>% 
-      group_by(Model) %>% 
-      summarise(Total = sum(Prediction),
-                AvgPerState = mean(Prediction),
-                RMSE = mean(RMSE)) 
-      
-    
-       results
-    
-  })
-  
-  #----------------------RESULTS PAGE OUTPUT --------------------------------
-  
-  output$final_preds <- renderPlot({
-    
-    
-    final_preds = final_preds() %>%
-      mutate(state = tolower(setNames(state.name, state.abb)[state]))
-    
-    
-    #create map data
+    #join to the map data
     map = map_data("state") %>%
-      full_join(final_preds, by = c("region" = "state"))
+      left_join(forecast_by_state, by = c("region" = "State"))
+    
     #plot
     map_plot = ggplot(map, aes(long, lat, group = group)) +
-      geom_polygon(aes(fill = Predicted), color = "white")+
-      scale_fill_viridis_c(option = "B", direction=-1)+
-      ggtitle("Predicted COVID Measure (per 100,000) Next Week") +
+      geom_polygon(aes(fill = -Predictions), color = "white") +
+      scale_fill_viridis_c(option = "B")+
+      ggtitle("Predicted COVID-19 Measure per 100,000") +
+      theme_bw() +
       theme(axis.text = element_text(size = 16),
             axis.title = element_text(size = 20, face = "bold"),
             plot.title = element_text(size = 22, face = "bold"))
+    
+    
     
     
     
