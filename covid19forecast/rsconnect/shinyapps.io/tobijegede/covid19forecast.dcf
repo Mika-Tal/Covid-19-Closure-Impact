@@ -1,0 +1,12 @@
+name: covid19forecast
+title: covid19forecast
+username:
+account: tobijegede
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4110758
+bundleId: 4583122
+url: https://tobijegede.shinyapps.io/covid19forecast/
+when: 1620683531.79035
+asMultiple: FALSE
+asStatic: FALSE
