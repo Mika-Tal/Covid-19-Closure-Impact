@@ -2,8 +2,6 @@
 # 1. Install Delphi R package from below
 #https://cmu-delphi.github.io/covidcast/covidcastR/articles/covidcast.html
 # #installs the COVIDCast API information
-# devtools::install_github("cmu-delphi/covidcast", ref = "main",
-#                          subdir = "R-packages/covidcast")
 
 
 #To test out our App, you can use the sample dataset provided on our Github site, under the "Data" folder: "user_input_policies_full_example.csv"
@@ -16,6 +14,9 @@ library(tidyverse)
 library(DT) #provides easy to use data tables within shiny
 library(glmnet) # to perform L1 regularization
 library(tidymodels)
+devtools::install_github("cmu-delphi/covidcast", ref = "main",
+                         subdir = "R-packages/covidcast")
+
 library(covidcast)
 library(lubridate)
 library(randomForest)
