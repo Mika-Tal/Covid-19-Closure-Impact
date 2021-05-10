@@ -42,7 +42,7 @@ state_controls <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/stat
 # 
 # 
 
-
+#Please use the "user_input_policies_full_example.csv" file to test out our app functional
 
 
 #Dashboard Header & Title ---------------------------------------------------------
@@ -305,36 +305,52 @@ body <- dashboardBody(
     tabItem("features",
             
           
-            #Gives the user a message to describe the data table
-            htmlOutput(outputId = "forecast_table"),    
+            # #Gives the user a message to describe the data table
+            # htmlOutput(outputId = "forecast_table"),    
+            # 
+            # #adds visual space
+            # 
+            # br(),
+            # 
+            # br(),
+            # 
+            # br(),
+            # 
+            # 
+            # #displays the two week forecast data
+            # dataTableOutput(outputId = "forecast"),
+            # 
+            # br(),
+            # 
+            # br(),
+            # 
             
-            #adds visual space
+            #click to run  random forest 
+            actionButton(inputId = "run_rand_for",
+                         label = "Click to Run Random Forests"),
             
             br(),
             
             br(),
             
-            br(),
+            conditionalPanel(condition = "input.run_rand_for != 0",
+                             
+                             #message to show label what is being displayed
+                             htmlOutput(outputId = "ft_sel"),
+
+
+                             br(),
+
+
+                             #shows the variable importance plot
+                             plotOutput(outputId = "varImp"),
+
+
+
+                             )
+
             
-            
-            #displays the two week forecast data
-            dataTableOutput(outputId = "forecast"),
-            
-            br(),
-            
-            br(),
-            
-            #message to show label what is being displayed
-            htmlOutput(outputId = "ft_sel"),
-            
-            
-            br(),
-            
-            
-            #shows the variable importance plot
-            plotOutput(outputId = "varImp"),
-            
-            
+          
     ),
     
     
@@ -342,27 +358,45 @@ body <- dashboardBody(
     #GLM Page --------------------------------------------------
     tabItem("model_1",
             
+            #click to run the GLM model
+            actionButton(inputId = "runglm",
+                         label = "Click to Run the General Linear Model"),
             
-            plotOutput(outputId = "outcome_all_glm"),
-
-            br(),
-
-
-            br(),
-
-            plotOutput(outputId = "preds_act"),
-
-            br(),
-
-            br(),
-
-            plotOutput(outputId = "residuals_glm")
-
-
-           
-            # dataTableOutput(outputId = "testing_glm"),
-            # dataTableOutput(outputId = "testing_glm_2")
-            # 
+            #adds visual space between the components
+             br(),
+            
+             br(),
+            
+            conditionalPanel(condition = "input.runglm != 0",
+                             
+                             htmlOutput(outputId = "coefs"),
+                             
+                             br(),
+                             
+                             
+                             br(),
+                             
+                             dataTableOutput(outputId = "glm_coefs"),
+                             
+                             
+                           # #  plotOutput(outputId = "outcome_all_glm"),
+                           #   
+                           #   br(),
+                           #   
+                           #   
+                           #   br(),
+                           #   
+                             plotOutput(outputId = "preds_act"),
+                             
+                             br(),
+                             
+                             br(),
+                             
+                             plotOutput(outputId = "residuals_glm")
+                             
+                             
+            )
+            
     ),
     
     
@@ -382,42 +416,47 @@ body <- dashboardBody(
             #Gives the user a message while waiting for XGBoost to run
             htmlOutput(outputId = "xgb_pls_wait"),    
             
+              
+              #creates visual space
+              br(),
+              
+              br(),
+              
+              conditionalPanel(condition = "input.runxgb != 0",
+                               
+                               
+              
+                    htmlOutput(outputId = "display_model"), 
+                    
+                    br(),
+                    
+                    
+                    dataTableOutput(outputId = "model_specs"),
+                    
+                    
+                    #creates visual space
+                    br(),
+                    
+                    br(),
+                    
+                    plotOutput(outputId = "preds_vs_observed"),
+                    
+                    
+                    #creates visual space
+                    br(),
+                    
+                    br(),
+                    
+                  
+                    plotOutput(outputId = "state_RMSE_XGB"),
+                  
+                    br(),
+                  
+                    br(),
+                  
+                    plotOutput(outputId = "residual_plot_xgb")
             
-            #creates visual space
-            br(),
-            
-            br(),
-            
-            htmlOutput(outputId = "display_model"), 
-            
-            br(),
-            
-            
-            dataTableOutput(outputId = "model_specs"),
-            
-            
-            #creates visual space
-            br(),
-            
-            br(),
-            
-            plotOutput(outputId = "preds_vs_observed"),
-            
-            
-            #creates visual space
-            br(),
-            
-            br(),
-            
-          
-            plotOutput(outputId = "state_RMSE_XGB"),
-          
-            br(),
-          
-            br(),
-          
-            plotOutput(outputId = "residual_plot_xgb")
-            
+              )
     ),
     
    
@@ -852,23 +891,14 @@ server <- function(input, output) {
   
   output$ft_sel <- renderUI({
     
-    HTML(paste("Here's The Results of Feature Selection:", "Here's a Variable Importance Plot:", sep = "<br/><br/>"))
+    HTML(paste("Here's The Results of Feature Selection:", "Here's the Features with Top 10 Node Purity Values:", sep = "<br/><br/>"))
     
   })
   
   
   #RANDOM FOREST FEATURE SELECTION -----------------------------------
-  #creates a reactive dataframe for doing random forest
-  
+
   #Creates the forecast data for the generalized linear model
-  
-  # - merged_dataset()  — before missingness is dealt with or imputed
-  # - data_after_missing() — merged dataset after missingness has been handled
-  # - forecast_data() — add the two week forecast columns to the 
-  # - top_10() - dataset with the top 10 most important features, after feature selection has concluded
-  # 
-  #merged_dataset()
-  
   forecast_data_glm <- reactive({
     
     #store the dataset created after handling missingness in a temporary dataframe
@@ -982,13 +1012,28 @@ server <- function(input, output) {
   
   #gets the top 10 features from the variable importance plot after random forests has been run
   
-  top_10 <- reactive({
-    
-    mtry <- ncol(randfor_data())/3
-    result <- randfor_model(randfor_data(), mtry)
-    result
-    
-  }) 
+  
+  #Add an eventReactive button so only run random forest after clicking a button
+  #----- INSERT RANDOM FOREST BUTTON HERE----------#
+  
+  
+  top_10 <- eventReactive(input$run_rand_for, {
+
+          mtry <- ncol(randfor_data())/3
+          result <- randfor_model(randfor_data(), mtry)
+          result
+
+  }
+  )
+
+  
+  # top_10 <- reactive({
+  #   
+  #   mtry <- ncol(randfor_data())/3
+  #   result <- randfor_model(randfor_data(), mtry)
+  #   result
+  #   
+  # }) 
   
   
   output$varImp <- renderPlot({
@@ -1223,7 +1268,7 @@ geo_combine<- function(df){
   
   
 
-  datatrain_poly<- reactive({
+  datatrain_poly <- reactive({
     
     cleaning_lm(datatrain_lm())
     
@@ -1246,7 +1291,7 @@ geo_combine<- function(df){
   
 
   
-  #Creating the Model Matrices for the GLMnetmodel ---------------------------
+#-----------------------------Creating the Model Matrices for the GLMnetmodel ---------------------------
   
   createGLM_modelmat <- function(poly_df) {
     
@@ -1295,23 +1340,19 @@ geo_combine<- function(df){
   }
   
   
-  train_glm <- reactive({
-    
+  #-------- INSERT ACTION BUTTON FOR TRAINING GLM MODEL-------------#
+  train_glm <- eventReactive(input$runglm, {
+
     trainGLM_Model(datatrain_glmnet())
-  })
+
+  }
+  )
   
-  
-#-----------------INSERT COEFFICENTS INFO HERE --------------------#
-  
-#creates a testing dataframe
-  
-  # output$testing_glm <- renderDataTable({
-  # 
-  #   DT::datatable(data = as.matrix(coef(train_glm())),
-  #                 rownames = FALSE, options = list(scrollX = T))
-  # 
-  # 
+  # train_glm <- reactive({
+  #   
+  #   trainGLM_Model(datatrain_glmnet())
   # })
+  # 
   
   
 #----------------------------------Predicting with glmnet -------------------
@@ -1394,43 +1435,83 @@ final_preds <- reactive({
   
 })
   
-  # output$testing_glm_2 <- renderDataTable({
-  # 
-  #   DT::datatable(data = final_preds(),
-  #                 rownames = FALSE, options = list(scrollX = T))
-  # 
-  # 
-  # })
-  # 
+
   
   
-#-------
+#------- CREATE GLM COEFFICIENTS TABLE -----------------------------------------#
 
-#datatrain_log <-datatrain_poly
-#datatrain_log <- subset(datatrain_log, y>0)
-#datatrain_log$y <-log(datatrain_log$y)  
 
-#datatrain_glmnet_log<- datatrain_log %>%
- # mutate(across(where(is.factor), ~ fct_lump_lowfreq(.))) %>%
- # model.matrix(object= ~ .-1, . , contrasts.arg =
-              #   lapply(data.frame(.[,sapply(data.frame(.), is.factor)]),
-                 #       contrasts, contrasts = FALSE))
-#train_glm_log<- glmnet(
- # x = datatrain_glmnet_log[,-1],
- # y = datatrain_glmnet_log[,1], relax = FALSE, nfolds= 3)
+#creates a new dataframe that takes the log of the polynomial dataframe
 
-#attempt1<-coef.glmnet(datatrain_glmnet, s=lamMin)
-
-#glm_col_names <- names(as.data.frame(datatrain_glmnet_log))
-#glm_coef_table<- as.data.frame(matrix(coef.glmnet(train_glm_log, s=lamMin)))
-
-#glm_coef_table$Variables<- glm_col_names
-#glm_coef_table<-glm_coef_table%>% rename(Coefficient = 'V1')
-#glm_coef_table[1,2]<- "Intercept"
+datatrain_log <- reactive({
   
-#HTML(paste("Coefficients can be interpreted as for each unit of change of the independent (variable) there is that coefficient of percentage change in your COVID-19 measure", sep = "<br/><br/>"))
+  datatrain_log <- datatrain_poly()
+  datatrain_log <- subset(datatrain_log, y>0)
+  datatrain_log$y <- log(datatrain_log$y)
+  
+  datatrain_log
+  
+  
+})
+
+
+#createGLM_modelmat
+
+#creates a model matrix for the GLM model using the newly created dataframe with the log of y values
+datatrain_glmnet_log <- reactive({
+  
+  createGLM_modelmat(datatrain_log())
+  
+})
+
+
+train_glm_log<- reactive({
+
+trainGLM_Model(datatrain_glmnet_log())
+  
+})
+
+
+
+
+output$coefs <- renderUI({
+  
+  
+  HTML(paste("The coefficients below can be interpreted as follows: 'For each unit of change of the (variable of interest) there is a (coefficient*100) percentage change in your COVID-19 measure: ", sep = "<br/><br/>"))
+  
+})
+
+
+output$glm_coefs <- renderDataTable({
+  
+  
+  glm_col_names <- names(as.data.frame(datatrain_glmnet_log()))
+  
+  lamMin<- min(train_glm_log()[["lambda"]])
+  
+  
+  glm_coef_table <- as.data.frame(matrix(coef.glmnet(train_glm_log(), s=lamMin)))
+  
+  glm_coef_table$Variables<- glm_col_names
+  
+  glm_coef_table<-glm_coef_table%>% rename(Coefficient = 'V1')
+  
+  glm_coef_table[1,2]<- "Intercept"
+
+
+  DT::datatable(data = glm_coef_table %>% 
+                       select(Variables, Coefficient),
+                rownames = FALSE, options = list(scrollX = T))
+
+
+})
+
+
+
+
+
 #------------------------------------------------ Plots --------------------------------
-  
+
   output$final_preds <- renderPlot({
 
 
