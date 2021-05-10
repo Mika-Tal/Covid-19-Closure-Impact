@@ -1,12 +1,13 @@
-#install necessary libraries
-#Install Delphi R package from below
+# In order to run our app locally, a user would need to install the following packages:
+# 1. Install Delphi R package from below
 #https://cmu-delphi.github.io/covidcast/covidcastR/articles/covidcast.html
 # #installs the COVIDCast API information
 # devtools::install_github("cmu-delphi/covidcast", ref = "main",
 #                          subdir = "R-packages/covidcast")
 
-# In order to run our app locally, a user would need to install the following packages:
-#
+
+#To Test Out Our App, you can use the sample dataset provided on our Github site, under the "Data" folder: 
+#Please use the "user_input_policies_full_example.csv" file to test out our app functional
 
 #Load in necessary libraries
 
@@ -24,13 +25,10 @@ library(caret)
 library(fuzzyjoin)
 library(maps)
 library(stringr) # aids with string handling
-# add these libraries 
-# libs = c("tidyverse","data.table","stargazer", "caret", "e1071", "splines",
-#          "randomForest", "C50", "xgboost", "ggplot2", "cowplot", "forecast")
 
-
-#read in static datasets -- controls only and the sample user input data
+#read in static datasets -- controls only and the user ingestion template
 state_controls <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/state_controls.csv")
+user_input_template <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/user_input_template.csv")
 
 
 #Dictionary of Datasets Created:
@@ -42,7 +40,6 @@ state_controls <- read.csv("~/Documents/GitHub/Covid-19-Closure-Impact/Data/stat
 # 
 # 
 
-#Please use the "user_input_policies_full_example.csv" file to test out our app functional
 
 
 #Dashboard Header & Title ---------------------------------------------------------
@@ -83,20 +80,16 @@ body <- dashboardBody(
             htmlOutput(outputId = "welcome"),
             
             #changed how the welcome message should display--------
-            tags$head(tags$style("#welcome{color: blue;
+            tags$head(tags$style("#welcome{color: black;
                                  font-size: 20px;
-                                 font-style: italic;
                                  }"
             )
             ),
             
             #adds visual space between the page elements
             br(),
-            
             br(),
-            
             br(),
-            
             
             #select the date range to use to query the CMU API
             dateRangeInput(inputId = "dates_of_interest",
@@ -123,9 +116,7 @@ body <- dashboardBody(
             
             #adds visual space between the page elements
             br(),
-            
             br(),
-            
             br(),
             
             #display the queried table to the user
@@ -134,9 +125,7 @@ body <- dashboardBody(
             
             #adds visual space between the page elements
             br(),
-            
             br(),
-            
             br(),
             
             
@@ -246,7 +235,6 @@ body <- dashboardBody(
                              )),
             
             #displays the resulting dataTable from merging
-            
             actionButton(inputId = "click_merge",
                          label = "Click to Merge COVID Case Data With Selected  Additional Features"),
             
@@ -254,6 +242,14 @@ body <- dashboardBody(
             br(),
             br(),
             htmlOutput(outputId = "merged"),
+            
+            #changed how the merged message should display--------
+            tags$head(tags$style("#merged{color: black;
+                                 font-size: 18px;
+                                  }"
+            )
+            ),
+            
             
             #add visual space
             br(),
@@ -270,19 +266,22 @@ body <- dashboardBody(
             #displays words to go before displaying the dataTable output
             htmlOutput(outputId = "no_miss_mess"),
             
+            #changed how the 'no missing' message should display--------
+            tags$head(tags$style("#no_miss_mess{color: black;
+                                 font-size: 18px;
+                                 }"
+            )
+            ),
+            
             #adds visual space
-            
             br(),
-            
             br(),
             
             #displays the % of missingness in the data
             dataTableOutput(outputId = "missing_stats"),
             
             #adds visual space 
-            
             br(),
-            
             br(),
             
             #allows the user to decide how to deal with missingness
@@ -293,7 +292,6 @@ body <- dashboardBody(
             
             #adds visual space
             br(),
-            
             br(),
             
             #gives the user the option to inspect their dataset after dealing with missingness
@@ -304,39 +302,25 @@ body <- dashboardBody(
     #Feature Selection page ------------------------------------------------------------------------------
     tabItem("features",
             
-          
-            # #Gives the user a message to describe the data table
-            # htmlOutput(outputId = "forecast_table"),    
-            # 
-            # #adds visual space
-            # 
-            # br(),
-            # 
-            # br(),
-            # 
-            # br(),
-            # 
-            # 
-            # #displays the two week forecast data
-            # dataTableOutput(outputId = "forecast"),
-            # 
-            # br(),
-            # 
-            # br(),
-            # 
             
             #click to run  random forest 
             actionButton(inputId = "run_rand_for",
                          label = "Click to Run Random Forests"),
             
             br(),
-            
             br(),
             
             conditionalPanel(condition = "input.run_rand_for != 0",
                              
                              #message to show label what is being displayed
                              htmlOutput(outputId = "ft_sel"),
+                             
+                             #changed how the feature selection message should display--------
+                             tags$head(tags$style("#ft_sel{color: black;
+                                 font-size: 18px;
+                                 }"
+                             )
+                             ),
 
 
                              br(),
@@ -344,17 +328,11 @@ body <- dashboardBody(
 
                              #shows the variable importance plot
                              plotOutput(outputId = "varImp"),
-
-
-
-                             )
-
-            
-          
+                     )
+   
     ),
     
-    
-    
+ 
     #GLM Page --------------------------------------------------
     tabItem("model_1",
             
@@ -371,30 +349,28 @@ body <- dashboardBody(
                              
                              htmlOutput(outputId = "coefs"),
                              
+                             #changed how the coefficients selection message should display--------
+                             tags$head(tags$style("#coefs{color: black;
+                                 font-size: 18px;
+                                 }"
+                             )
+                             ),
+                             
                              br(),
-                             
-                             
                              br(),
                              
                              dataTableOutput(outputId = "glm_coefs"),
                              
                              
-                           # #  plotOutput(outputId = "outcome_all_glm"),
-                           #   
-                           #   br(),
-                           #   
-                           #   
-                           #   br(),
-                           #   
+                             br(),
+                             br(),
+                             
                              plotOutput(outputId = "preds_act"),
                              
                              br(),
-                             
                              br(),
                              
-                             plotOutput(outputId = "residuals_glm")
-                             
-                             
+                             plotOutput(outputId = "residuals_glm") 
             )
             
     ),
@@ -410,16 +386,21 @@ body <- dashboardBody(
             
             #creates visual space
             br(),
-            
             br(), 
             
             #Gives the user a message while waiting for XGBoost to run
             htmlOutput(outputId = "xgb_pls_wait"),    
             
+            #changed how the XG Boost message should display--------
+            tags$head(tags$style("#xgb_pls_wait{color: black;
+                                 font-size: 18px;
+                                 }"
+            )
+            ),
+            
               
               #creates visual space
               br(),
-              
               br(),
               
               conditionalPanel(condition = "input.runxgb != 0",
@@ -427,6 +408,12 @@ body <- dashboardBody(
                                
               
                     htmlOutput(outputId = "display_model"), 
+                    
+                    tags$head(tags$style("#display_m{color: black;
+                                 font-size: 18px;
+                                  }"
+                    )
+                    ),
                     
                     br(),
                     
@@ -436,7 +423,6 @@ body <- dashboardBody(
                     
                     #creates visual space
                     br(),
-                    
                     br(),
                     
                     plotOutput(outputId = "preds_vs_observed"),
@@ -444,14 +430,12 @@ body <- dashboardBody(
                     
                     #creates visual space
                     br(),
-                    
                     br(),
                     
                   
                     plotOutput(outputId = "state_RMSE_XGB"),
                   
                     br(),
-                  
                     br(),
                   
                     plotOutput(outputId = "residual_plot_xgb")
@@ -517,7 +501,7 @@ server <- function(input, output) {
   output$welcome <- renderUI({
     
     
-    HTML(paste("Hello! Welcome to our Machine Learning Pipeline Visualization App. To get started:", "Step 1: Choose the Date Range For Which You Would Like COVID Data ", "Step 2: Query the CMU Delphi API to Get the Requested COVID Data", "Step 3: Upload The Additional Features You Would Like To Use, Using the Provided Template", sep = "<br/><br/>"))
+    HTML(paste("Hello! Welcome to our COVID-19 Forecasting and Machine Learning Visualization App. To get started:", "Step 1: Choose the Date Range For Which You Would Like COVID Data ", "Step 2: Query the CMU Delphi API to Get the Requested COVID Data", "Step 3: Upload The Additional Features You Would Like To Use, Using the Provided Template", "Step 4: Step Through the Remaining Pages on the Dashboard to walk through the Machine Learning Process",sep = "<br/><br/>"))
     
   })
   
@@ -592,12 +576,12 @@ server <- function(input, output) {
   })
   
   
-  #***allows the user to download the data ingestion template
+  #allows the user to download the data ingestion template
   output$template <- downloadHandler(
     filename = "Data_Ingestion_Template.csv",
     content = function(file) {
       
-      write.csv(user_input_example, file, row.names = FALSE) #***change the file that is downloaded
+      write.csv(user_input_template, file, row.names = FALSE) #***change the file that is downloaded
     }
   )
   
