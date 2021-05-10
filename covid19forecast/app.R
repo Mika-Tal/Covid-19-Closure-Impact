@@ -8,27 +8,7 @@
 
 #Load in necessary libraries
 
-
-# library(grDevices)
-# library(httr)
-# library(MMWRweek)
-# library(purrr)
-# library(rlang)
-# library(sf)
-# library(gridExtra)
-# library(httptest)
-# library(knitr) 
-# library(mockery)
-# library(rmarkdown)
-# library(testthat)
-# library(tibble)
-# library(vdiffr)
-
-#knitr, mockery, rmarkdown, testthat, tibble, vdiffr
-
-#install.packages("covidcast")
 library(covidcast)
-
 library(shiny) #enables the use of shiny functionality
 library(shinydashboard) #allows for the creation of a dashboard using shiny
 library(tidyverse)
@@ -47,15 +27,6 @@ library(stringr) # aids with string handling
 state_controls <- read.csv("state_controls.csv")
 user_input_template <- read.csv("user_input_template.csv")
 
-
-#Dictionary of Datasets Created:
-# 
-# - merged_dataset()  — before missingness is dealt with or imputed
-# - data_after_missing() — merged dataset after missingness has been handled
-# - forecast_data() — add the two week forecast columns to the 
-# - top_10() - dataset with the top 10 most important features, after feature selection has concluded
-# 
-# 
 
 
 
@@ -98,7 +69,7 @@ body <- dashboardBody(
             
             #changed how the welcome message should display--------
             tags$head(tags$style("#welcome{color: black;
-                                 font-size: 20px;
+                                 font-size: 16px;
                                  }"
             )
             ),
@@ -264,7 +235,7 @@ body <- dashboardBody(
             
             #changed how the merged message should display--------
             tags$head(tags$style("#merged{color: black;
-                                 font-size: 18px;
+                                 font-size: 16px;
                                   }"
             )
             ),
@@ -289,7 +260,7 @@ body <- dashboardBody(
             
             #changed how the 'no missing' message should display--------
             tags$head(tags$style("#no_miss_mess{color: black;
-                                 font-size: 18px;
+                                 font-size: 16px;
                                  }"
             )
             ),
@@ -339,7 +310,7 @@ body <- dashboardBody(
                              
                              #changed how the feature selection message should display--------
                              tags$head(tags$style("#ft_sel{color: black;
-                                 font-size: 18px;
+                                 font-size: 16px;
                                  }"
                              )
                              ),
@@ -374,7 +345,7 @@ body <- dashboardBody(
                              
                              #changed how the coefficients selection message should display--------
                              tags$head(tags$style("#coefs{color: black;
-                                 font-size: 18px;
+                                 font-size: 16px;
                                  }"
                              )
                              ),
@@ -426,7 +397,7 @@ body <- dashboardBody(
                              
                              #change the formatting of the html text display
                              tags$head(tags$style("#display_model{color: black;
-                                 font-size: 18px;
+                                 font-size: 16px;
                                   }"
                              )
                              ),
