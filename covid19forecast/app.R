@@ -222,9 +222,29 @@ body <- dashboardBody(
                                                           selected = names(state_controls)[2:5])
                              )),
             
+            #adds visual space
+            br(),
+            br(),
+            
+            
             #displays the resulting dataTable from merging
             actionButton(inputId = "click_merge",
-                         label = "Click to Merge COVID Case Data With Selected  Additional Features"),
+                         label = "Click to Merge Datasets"),
+            
+            #adds visual space
+            br(),
+            br(),
+            #adds note about having to click the action button to merge the datsets
+            htmlOutput(outputId = "how_to_merge"),
+            
+            #changes how the 'how_to_merge' message should display--------
+            tags$head(tags$style("#how_to_merge{color: black;
+                                 font-size: 14px;
+                                  }"
+            )
+            ),
+            
+            
             
             #add visual space
             br(),
@@ -613,6 +633,15 @@ server <- function(input, output) {
   
   #----------------------------------------- DATA MERGING PAGE OUTPUT ------------------------------------------------------------------------------
   
+  
+  #creates a display message for how/when you need to click the "merge dataset" button
+  
+  output$how_to_merge <- renderUI({
+    
+    HTML(paste("Please note: You will need to click on the button above, even if you are not using our set of control features.", "Based on your selections, the above merge button will either return just the COVID-19 data pulled on the previous page or a combination of the COVID-19 data, your inputted data, and which controls of ours you decide to use.", "This button can be clicked several times if your data preferences change.", sep = "<br/><br/>"))
+    
+    
+  })
   
   #creates the display message for the merged dataset
   output$merged <- renderUI({
@@ -1439,7 +1468,7 @@ server <- function(input, output) {
   output$coefs <- renderUI({
     
     
-    HTML(paste("The coefficients below can be interpreted as follows: 'For each unit of change of the (variable of interest) there is a (coefficient*100) percentage change in your COVID-19 measure: ", sep = "<br/><br/>"))
+    HTML(paste("The coefficients below can be interpreted as follows: 'For each unit change in the (variable of interest), there is a (coefficient*100) percentage change in your COVID-19 measure' : ", sep = "<br/><br/>"))
     
   })
   
@@ -1562,7 +1591,7 @@ server <- function(input, output) {
       returnData=FALSE
     )
     # create grid for tuning hyperparameters
-    XGBtg <- expand.grid(nrounds = 20, #temporary value to facilitate faster run time during app construnction c(50, 100, 250),
+    XGBtg <- expand.grid(nrounds = 20, #temporary value to facilitate faster run time during app construction c(50, 100, 250),
                          max_depth = 5, #c(5, 10, 15),
                          colsample_bytree = 0.5, #seq(0.5, 0.9, length.out = 5),
                          eta = 0.1, #c(0.1, 0.2, 0.4),
@@ -1696,7 +1725,7 @@ server <- function(input, output) {
       theme(axis.text = element_text(size = 16),
             axis.title = element_text(size = 20, face = "bold"),
             plot.title = element_text(size = 22, face = "bold")) +
-      ggtitle("XGB Actual vs. Predicted")
+      ggtitle("eXtreme Gradient Boosting Actual vs. Predicted")
     
     
     
@@ -1716,7 +1745,7 @@ server <- function(input, output) {
     map_plot = ggplot(map, aes(long, lat, group = group)) +
       geom_polygon(aes(fill = -RMSE), color = "white") +
       
-      ggtitle("XGB RMSE by State") +
+      ggtitle("eXtreme Gradient Boosting RMSE by State") +
       
       theme(axis.text = element_text(size = 16),
             axis.title = element_text(size = 20, face = "bold"),
@@ -1757,7 +1786,7 @@ server <- function(input, output) {
     resids_plot = ggplot(resids, aes(x = Residuals, fill = Model)) +
       geom_density( color = 'white', alpha = 0.7) +
       theme_bw() + 
-      ggtitle("XGB Residual Density") +
+      ggtitle("eXtreme Gradient Boosting Residual Density") +
       theme(axis.text = element_text(size = 16),
             axis.title = element_text(size = 20, face = "bold"),
             plot.title = element_text(size = 22, face = "bold"))
@@ -1774,42 +1803,41 @@ server <- function(input, output) {
     preds_glm <- final_preds()$Predicted
     test <- test_data()
     
+    
     baseline = test %>%  
-      select(covid_measure, two_week_outcome) %>% 
-      mutate(average_outcome = mean(covid_measure)) 
+      select(covid_measure, two_week_outcome) %>%
+      mutate(average_outcome = mean(covid_measure))
     
     XGBRMSE = sqrt(mean ((test$two_week_outcome - XGBPredsPred) ^ 2 ) )
     
     GLMRMSE = sqrt(mean ((test$two_week_outcome - preds_glm) ^ 2 ) )
     
     BLRMSE = sqrt(mean (
-      (baseline$two_week_outcome - baseline$average_outcome) ^ 2 ) )
+      (test$two_week_outcome - baseline$average_outcome) ^ 2 ) )
     
     
     results = data.frame(Prediction = test$two_week_outcome,
                          Model = rep("Baseline", nrow(test)),
-                         RMSE = BLRMSE) %>% 
+                         RMSE = BLRMSE) %>%
+      bind_rows(data.frame(Prediction = as.vector(preds_glm),
+                           Model = rep("GLM", length(preds_glm)),
+                           RMSE = GLMRMSE)) %>%
       bind_rows(data.frame(Prediction  = XGBPredsPred,
                            Model = rep("XGB", length(XGBPredsPred)),
                            RMSE = XGBRMSE)) %>%
-      bind_rows(data.frame(Prediction = as.vector(preds_glm),
-                           Model = rep("GLM", length(preds_glm)),
-                           RMSE = GLMRMSE)) %>% 
-      group_by(Model) %>% 
-      summarise(Total = sum(Prediction),
-                AvgPerState = mean(Prediction),
-                RMSE = mean(RMSE)) 
+      group_by(Model) %>%
+      summarise("Total National Count" = sum(Prediction),
+                "Avg Per State" = mean(Prediction),
+                RMSE = mean(RMSE))
     
     
     results
     
-  })
+  })  
   
+
   
-  #prints out the results of running the XGBoost Model in tabular form
-  
-  
-  #creates a new reactive dataframe thart includes all of the predictions across all the staes
+  #creates a new reactive dataframe thart includes all of the predictions across all the states
   outcome_all <- reactive({
     
     XGBPredsPred <- XGBpredictions(xgb_model_output(), preds_data())
@@ -1876,24 +1904,6 @@ server <- function(input, output) {
     
   })
   
-  
-  
-  # #prints out the predictions by state
-  # output$predictions_state_tabular <- renderDataTable({
-  #   
-  #   #Create week labels column
-  #   Week = c("Week_1", "Week_2")
-  #   
-  #   #Summarise predictions by prediction week
-  #   XGBPredsState <- XGBpredictions(xgb_model_output(), pred_state_2())
-  #   
-  #   preds_state = data.frame(Week = Week, Prediction  = XGBPredsState) 
-  #   
-  #   DT::datatable(data = preds_state,
-  #                 rownames = FALSE, options = list(scrollX = T))
-  #   
-  # })
-  # 
   
   
   #creates a map plot of the expected forecast in two weeks (nationally)
