@@ -11,6 +11,6 @@ The primary motivation for providing the user the ability to upload custom data 
 Our COVID-19 Forecasting and Machine Learning Pipeline Tool can be accessed at: **https://tobijegede.shinyapps.io/covid19forecast/.**
 
 
-**Please note:** You need to run the pages on our R Shiny app in the order in which they appear on the sidebar (i.e. Overview & Data Ingestion then Data Merging then Data Pre-Processing then Feature Selection, etc.). Additionally, some of the processes running in the background of the app take a minute or so to load. Please allocate additional time for the Feature Selection, Generalized Linear Model, and eXtreme Gradient Boosting pages to run once you've clicked on the action buttons associated with these pages. 
+**Please note:** You need to run the pages on our R Shiny app **in the order in which they appear on the sidebar** (i.e. Overview & Data Ingestion then Data Merging then Data Pre-Processing then Feature Selection, etc.). Additionally, some of the processes running in the background of the app take a minute or so to load. Please allocate additional time for the Feature Selection, Generalized Linear Model, and eXtreme Gradient Boosting pages to run once you've clicked on the action buttons associated with these pages. 
 
 If you would like to explore the underlying code for our R Shiny app, it can be found in this repository in the **"covid19forecast" folder in the app.R file.**
