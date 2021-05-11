@@ -1810,7 +1810,7 @@ server <- function(input, output) {
     
     XGBRMSE = sqrt(mean ((test$two_week_outcome - XGBPredsPred) ^ 2 ) )
     
-    GLMRMSE = sqrt(mean ((test$two_week_outcome - preds_glm) ^ 2 ) )
+    GLMRMSE = sqrt(mean ((test$two_week_outcome - as.vector(preds_glm)) ^ 2 ) )
     
     BLRMSE = sqrt(mean (
       (test$two_week_outcome - baseline$average_outcome) ^ 2 ) )
